@@ -3,22 +3,53 @@
 Web de la Automotora Mar Motors (Montevideo): catálogo de autos, ficha de cada auto, consultas por WhatsApp, formulario para vender o permutar y panel para cargar autos.
 
 - **Inicio**: `index.html`: hero, patio con filtros, financiación, vendé/permutá y horarios.
-- **Ficha del auto**: en la web publicada cada auto tiene su página (`autos/12-chevrolet-onix-lt-1-4-2019/`); probando en la compu es `auto.html?id=12`.
+- **Ficha del auto**: cada auto tiene su página, `autos/<slug>/` (slug = marca-modelo-año, ej. `autos/chevrolet-onix-lt-1-4-2019/`).
 - **Panel del administrador**: `admin/`
 
-Es una web estática (HTML + CSS + JS). El backend es [Supabase](https://supabase.com): base de datos, fotos y login del administrador, todo dentro del plan gratis. Al publicar, `scripts/build.mjs` arma las páginas de los autos y lo que necesita Google (ver «SEO»). El diseño original (Claude Design) está en `diseno/`.
+**Web de prueba:** https://matias-bermudez.github.io/mar-motors/ (en modo prueba: no aparece en Google). El diseño original (Claude Design) está en `diseno/`.
 
-**Web de prueba:** https://matias-bermudez.github.io/mar-motors/ (en modo prueba: no aparece en Google).
+## Arquitectura
+
+Sigue las reglas de la **Plataforma Automotoras** (`~/Proyectos/plataforma-automotoras/README.md`; referencia: DN Automóviles).
+
+- **Web estática, sin servidor.** `scripts/build.mjs` (Node, sin dependencias) lee los autos de la base, **baja las fotos al sitio** (`img/autos/<slug>/`, con caché en `.cache/fotos/`) y escribe todo el HTML en `_site/`, más `assets/js/autos.js` con los mismos autos para el navegador (filtros, galería, permuta). **La web pública nunca consulta Supabase**; el 404 es estático.
+- **Base compartida** (un Supabase para todas las automotoras): esta web solo lee y escribe filas con `concesionaria = 'mar-motors'`. El esquema se cambia **solo** en `plataforma-automotoras/supabase/schema.sql`; acá no se crean ni alteran tablas.
+- **Panel** `/admin/`: página estática con supabase-js (login con email y contraseña). Es lo único que habla con Supabase en vivo.
+- **Publicación:** GitHub Actions arma y publica en GitHub Pages al hacer push, cuando se guarda un auto en el panel y cada 15 minutos si cambió algo (ver «Publicar»).
+
+| Archivo | Qué es |
+|---|---|
+| `assets/js/config.js` | WhatsApp, teléfonos, redes, horarios, `sitioUrl`, `indexar`, `supabaseUrl`, `supabaseKey`, `concesionaria` |
+| `assets/js/modelo.js` | **Adaptador** fila de la base ↔ auto de la web (ver tabla abajo) y el slug |
+| `assets/js/db.js` | Autos de la web pública: lee `assets/js/autos.js` (lo genera el build) |
+| `assets/js/supabase.js` | Datos del panel: login, permisos, autos, fotos (supabase-js 2.45.4 desde jsdelivr) |
+| `assets/js/ui.js` | Tarjetas, ficha, links y mensajes de WhatsApp (lo usan el navegador y el build) |
+| `assets/js/inicio.js`, `ficha.js`, `admin.js` | Lo interactivo de cada página |
+| `index.html`, `auto.html`, `404.html`, `admin/index.html` | Plantillas: el build completa los autos, el SEO y `?v=` en css/js |
+| `scripts/build.mjs` | Arma `_site/` |
+| `.github/workflows/deploy.yml` | Publicación |
+
+### Campos: base ↔ web
+
+| Web (Mar Motors) | Base (`autos`) |
+|---|---|
+| `caja` | `transmision` |
+| `carroceria` (hatch, sedan, suv, pickup, utilitario) | `carroceria` igual; además `tipo`: utilitario → `utilitario`, suv/pickup → `camioneta`, el resto → `auto` |
+| `precio` + `moneda` | `precio` (entero, vacío = «Consultar») + `moneda` (`USD` → «U$S 14.500», `UYU` → «$ 450.000») |
+| `fotos` | `fotos`: rutas del bucket `fotos`, `mar-motors/<uuid>.jpg` (1600 px) + `mar-motors/<uuid>_m.jpg` (640 px) |
+| `id` (se muestra como «Ref. #id») y `slug` | `id` y `slug` |
+| marca, modelo, anio, km, combustible, motor, color, puertas, descripcion, estado, publicado | mismas columnas |
+| lo propio que no tenga columna | `extra` (jsonb; hoy no hace falta) |
+
+Las columnas que Mar Motors no usa (`destacado`, `etiqueta`, `acepta_permuta`, `equipamiento`…) quedan con su valor por defecto y el panel no las pisa. Mar Motors no tiene datos privados (matrícula, notas): `autos_privado` no se usa.
 
 ## Probarla en tu compu
 
 ```bash
-python3 -m http.server 8000
+node scripts/build.mjs --local && python3 -m http.server 8803 -d _site
 ```
 
-Abrí http://localhost:8000. Sin Supabase configurado la web muestra 7 autos de ejemplo, y los botones y el formulario ya abren WhatsApp.
-
-Para ver la versión publicada (con las páginas de cada auto): `node scripts/build.mjs` y servir la carpeta `_site/`.
+Abrí http://localhost:8803 (el 8765 y el 8791 los usan otros proyectos). Lee los autos reales de la base; `--local` solo cambia la carpeta base para servirla en la raíz.
 
 ## WhatsApp
 
@@ -31,66 +62,69 @@ whatsapp: { display: '091 969 322', intl: '59891969322' },   // prueba
 
 Qué mensaje llega en cada caso:
 
-- **Consultar un auto** (tarjeta o ficha): marca, modelo, año, km, precio, `Ref. #id` y el **link de la publicación**, así no hay dudas de qué auto es.
+- **Consultar un auto** (tarjeta o ficha): marca, modelo, año, km, precio, `Ref. #id` y el **link de la publicación** (`autos/<slug>/`), así no hay dudas de qué auto es.
 - **Financiarlo**: lo mismo, pidiendo opciones de financiación.
-- **Vender / permutar mi auto**: la ficha completa (auto, año, km, combustible, caja, precio pretendido o qué busca, si financia la diferencia, nombre y celular), y al final avisa que a continuación manda las fotos. La web le pide a la persona que adjunte las fotos en ese mismo chat.
-- Si entra a permutar desde la ficha de un auto, el mensaje también incluye el auto que le interesa y su link.
+- **Vender / permutar mi auto**: la ficha completa (auto, año, km, combustible, caja, precio pretendido o qué busca, si financia la diferencia, nombre y celular), y al final avisa que a continuación manda las fotos. La web le pide a la persona que adjunte las fotos en ese mismo chat (el público no sube nada a la base y la web no guarda consultas).
+- Si entra a permutar desde la ficha de un auto (`./?auto=<slug>#permuta`), el mensaje también incluye el auto que le interesa y su link.
 
 Los links usan `api.whatsapp.com/send` y no `wa.me`, porque la redirección de `wa.me` rompe los emojis del mensaje.
 
-## Conectar Supabase (una vez, ~5 minutos)
+## Base de datos
 
-1. Creá un proyecto en https://supabase.com (plan Free, región São Paulo).
-2. **SQL Editor** → pegá todo `supabase/schema.sql` → **Run**.
-3. **Authentication → Users → Add user**: email y contraseña del administrador (marcá *Auto Confirm User*). Después, en el SQL Editor:
-   ```sql
-   insert into public.admins (email) values ('el-email-del-admin@ejemplo.com');
-   ```
-   Solo los emails de la tabla `admins` pueden cargar, editar o borrar autos.
-4. **Authentication → Sign In / Providers**: desactivá *Allow new users to sign up*.
-5. **Project Settings → API**: copiá la *Project URL* y la clave *anon public* en `assets/js/config.js` (`supabaseUrl` y `supabaseAnonKey`).
+Ya está conectada a la base compartida (`supabaseUrl`, `supabaseKey` y `concesionaria: 'mar-motors'` en `config.js`). La clave es la *publishable*: va en el código, los permisos los pone la base (RLS): el público solo lee autos publicados y no vendidos; escribir requiere estar logueado en `admin/` con un email habilitado para `mar-motors`.
 
-La clave *anon* puede quedar en el código: los permisos (RLS) hacen que la web solo pueda leer autos publicados. Escribir requiere estar logueado en `admin/` con un email de la tabla `admins`.
+**Usuario del dueño** (una vez, lo hace Matías): Supabase → Authentication → Users → *Add user* (*Auto Confirm User*) y en el SQL Editor:
+
+```sql
+insert into public.admins (email, concesionaria) values ('el-email-del-dueño@ejemplo.com', 'mar-motors');
+```
 
 ## Panel (`/admin`)
 
-- Cargar, editar y borrar autos: marca, modelo y versión, año, km, carrocería, combustible, caja, motor, color, puertas, descripción.
+- Al entrar se chequea `puede_editar('mar-motors')`: si el usuario no está habilitado, se cierra la sesión y se avisa.
+- Cargar, editar y borrar autos: marca, modelo y versión, año, km, carrocería, combustible, caja, motor, color, puertas, descripción. Km y precio se escriben como en Uruguay («64.000», «U$S 14.500»): se toman solo los dígitos.
 - Precio en U$S o pesos (vacío = «Consultar»), estado (disponible / reservado / vendido) y publicado u oculto.
-- Fotos: se achican en el navegador antes de subir (~300 KB c/u), se ordenan con flechas y la primera es la portada.
-- Desde el listado: cambiar estado, publicar/ocultar, ver la ficha y copiar el link para compartir.
-- Los autos ocultos solo los ve el admin (sirve para dejarlos listos antes de publicarlos). Los vendidos quedan en la web marcados como «Vendido» hasta que los ocultes o borres.
+- La dirección del auto (`autos/<slug>/`) se arma sola con marca-modelo-año (con `-2`, `-3` si ya hay otro igual) y se actualiza si cambian esos datos.
+- Fotos: se achican en el navegador (1600 px, JPEG 0.82, y una de 640 px para las tarjetas), se ordenan con flechas y la primera es la portada. Al quitar una foto o borrar el auto se borran las dos medidas del bucket.
+- Desde el listado: cambiar estado, publicar/ocultar, ver la ficha y copiar el link para compartir. Un auto recién guardado dice «Actualizando la web…» hasta que sale publicado (un par de minutos).
+- Los autos ocultos solo los ve el admin (sirve para dejarlos listos antes de publicarlos). **Los vendidos salen de la web**: su link cae en la página 404.
 
 ## Otros datos del local
 
-En `assets/js/config.js`: teléfono fijo, otros celulares, dirección y barrio (con dirección aparece el mapa de Google), redes sociales y el bloque de renovación MiAuto (`mostrarRenovacion`).
+En `assets/js/config.js`: teléfono fijo, otros celulares, dirección y barrio (con dirección aparece el mapa de Google), redes sociales y el bloque de renovación MiAuto (`mostrarRenovacion`). Después de cambiar algo hay que hacer push a `main`.
 
 ## Publicar (GitHub Pages)
 
-Cada push a `main` dispara `.github/workflows/deploy.yml`, que corre `scripts/build.mjs` y publica `_site/` en GitHub Pages. También corre **cada hora**, así los autos que se cargan en el panel tienen su página propia (para Google y para la vista previa de WhatsApp) sin tocar el código. Un auto recién cargado igual se puede abrir y compartir enseguida: hasta que se genera su página, el link lo lleva a la ficha dinámica.
+`.github/workflows/deploy.yml` corre `scripts/build.mjs` y publica `_site/` en GitHub Pages (Settings → Pages → Source: **GitHub Actions**):
 
-- Settings → Pages → Source: **GitHub Actions** (ya configurado).
-- Para publicar a mano: pestaña Actions → «Publicar» → *Run workflow*.
-- GitHub pausa los workflows programados si el repo pasa 60 días sin actividad: si pasa, se reactiva desde la pestaña Actions.
+- en cada push a `main`;
+- **al guardar un auto en el panel**: la base dispara `workflow_dispatch` de `deploy.yml` (trigger `publicar_web`), si Mar Motors tiene `repo` cargado en la tabla `concesionarias` y el repo está en el token de GitHub (ver «Pendiente»);
+- cada 15 minutos, de respaldo: solo publica si los autos cambiaron (compara un hash con `estado.json` de la web publicada). Ese paso también re-habilita el workflow, porque GitHub apaga los programados a los 60 días sin commits.
 
-**Opcional: actualizar al instante.** Para que cada cambio del panel se publique en ~1 minuto en vez de esperar a la hora:
+Las fotos ya bajadas quedan en la caché de Actions (`.cache/fotos`): solo se bajan las nuevas. Los css/js llevan `?v=<hash>` para que el navegador no mezcle versiones (Pages cachea 10 minutos). Para publicar a mano: Actions → «Publicar» → *Run workflow*.
 
-1. GitHub → Settings → Developer settings → *Fine-grained tokens*: token solo para este repo, permiso **Contents: Read and write**.
-2. Supabase → Database → Webhooks → *Create*: tabla `autos`, eventos insert/update/delete, *HTTP Request* `POST https://api.github.com/repos/matias-bermudez/mar-motors/dispatches`, headers `Authorization: Bearer <token>`, `Accept: application/vnd.github+json` y body `{"event_type":"autos"}`.
+**Pendiente (lo hace Matías, una vez)** para que se publique al guardar:
+
+1. En la base: `update public.concesionarias set repo = 'matias-bermudez/mar-motors' where id = 'mar-motors';` (y lo mismo en la sección «Automotoras registradas» de `plataforma-automotoras/supabase/schema.sql`).
+2. GitHub → Settings → Developer settings → Fine-grained tokens → `dn-automoviles-publicar` → Edit → Repository access: sumar `mar-motors`.
+
+Mientras tanto, lo que se guarda en el panel aparece en la web en el próximo chequeo de 15 minutos.
 
 ### Dominio propio
 
-Con un dominio (por ejemplo `marmotors.com.uy`): poné `sitioUrl: 'https://www.marmotors.com.uy/'` en `config.js` (el build genera el `CNAME`), configurá el DNS como indica GitHub (Settings → Pages → Custom domain) y activá *Enforce HTTPS*. La dirección de github.io pasa a redirigir al dominio.
+Con un dominio (por ejemplo `marmotors.com.uy`): poné `sitioUrl: 'https://www.marmotors.com.uy/'` en `config.js` (el build genera el `CNAME`), configurá el DNS como indica GitHub (Settings → Pages → Custom domain) y activá *Enforce HTTPS*. La dirección de github.io pasa a redirigir al dominio. Actualizá también `sitio` de `mar-motors` en la tabla `concesionarias`. (Según la plataforma, al lanzar con dominio propio la web se muda a Cloudflare Pages: no depende de nada propio de GitHub Pages.)
 
 ## SEO
 
 La web está preparada para aparecer en búsquedas como «automotora Montevideo», «autos usados Montevideo», «Mar Motors» o el modelo de un auto («Onix 2019 usado Montevideo»):
 
-- **Una página por auto**, con dirección legible (`autos/12-chevrolet-onix-lt-1-4-2019/`), título y descripción propios y el contenido ya escrito en el HTML: Google lo lee sin ejecutar JavaScript.
+- **Una página por auto**, con dirección legible (`autos/chevrolet-onix-lt-1-4-2019/`), título, descripción, canonical y foto propios y el contenido ya escrito en el HTML: Google lo lee sin ejecutar JavaScript.
 - **Inicio** con los autos ya escritos en el HTML y textos pensados para las búsquedas locales.
-- **Datos estructurados** (schema.org): `AutoDealer` con teléfono, horarios, zona y redes; cada auto como `Car` con precio, km, año, combustible, caja y disponibilidad, más las migas de pan.
+- **Datos estructurados** (schema.org): `AutoDealer` con teléfono, horarios, zona y redes; cada auto como `Car` + `Offer` (con la moneda real, `USD` o `UYU`, y disponibilidad) + `BreadcrumbList`.
 - `sitemap.xml`, `canonical` en cada página, Open Graph (foto del auto en la vista previa de WhatsApp y Facebook).
-- Los autos vendidos, la ficha dinámica `auto.html` y la página 404 no van a Google. El panel tampoco.
-- Rápida: fuentes servidas desde el sitio (con precarga) y fotos achicadas y con carga diferida.
+- Los autos vendidos no se publican (su link da 404). La 404 y el panel no van a Google.
+- El filtro del patio queda en la URL (`?tipo=camionetas#autos`).
+- Rápida: fuentes servidas desde el sitio (con precarga), fotos servidas desde el sitio (640 px en tarjetas) y con carga diferida.
 
 ### Modo prueba → lanzamiento
 
