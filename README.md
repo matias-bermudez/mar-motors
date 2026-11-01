@@ -13,14 +13,15 @@ Web de la Automotora Mar Motors (Montevideo): catálogo de autos, ficha de cada 
 Sigue las reglas de la **Plataforma Automotoras** (`~/Proyectos/plataforma-automotoras/README.md`; referencia: DN Automóviles).
 
 - **Web estática, sin servidor.** `scripts/build.mjs` (Node, sin dependencias) lee los autos de la base, **baja las fotos al sitio** (`img/autos/<slug>/`, con caché en `.cache/fotos/`) y escribe todo el HTML en `_site/`, más `assets/js/autos.js` con los mismos autos para el navegador (filtros, galería, permuta). **La web pública nunca consulta Supabase**; el 404 es estático.
+- **Datos del negocio** (WhatsApp, teléfonos, dirección, horarios, zonas, redes): salen de `assets/js/config.js`, pisados por la fila de la tabla `negocios` que el dueño edita desde el panel. El build los deja escritos en todo el HTML y escribe en `_site/` un `assets/js/config.js` con los valores finales (lo usan los formularios y los mensajes de WhatsApp). Si la tabla o la fila no existen, se publica con `config.js` tal cual.
 - **Base compartida** (un Supabase para todas las automotoras): esta web solo lee y escribe filas con `concesionaria = 'mar-motors'`. El esquema se cambia **solo** en `plataforma-automotoras/supabase/schema.sql`; acá no se crean ni alteran tablas.
 - **Panel** `/admin/`: página estática con supabase-js (login con email y contraseña). Es lo único que habla con Supabase en vivo.
 - **Publicación:** GitHub Actions arma y publica en GitHub Pages al hacer push, cuando se guarda un auto en el panel y cada 15 minutos si cambió algo (ver «Publicar»).
 
 | Archivo | Qué es |
 |---|---|
-| `assets/js/config.js` | WhatsApp, teléfonos, redes, horarios, `sitioUrl`, `indexar`, `supabaseUrl`, `supabaseKey`, `concesionaria` |
-| `assets/js/modelo.js` | **Adaptador** fila de la base ↔ auto de la web (ver tabla abajo) y el slug |
+| `assets/js/config.js` | WhatsApp, teléfonos, redes, horarios, zonas, `sitioUrl`, `indexar`, `supabaseUrl`, `supabaseKey`, `concesionaria` (los datos del negocio los puede pisar la tabla `negocios`) |
+| `assets/js/modelo.js` | **Adaptador** fila de la base ↔ auto de la web (ver tabla abajo), el slug, y fila de `negocios` → config (`deNegocio`, `telefonoUY`) |
 | `assets/js/db.js` | Autos de la web pública: lee `assets/js/autos.js` (lo genera el build) |
 | `assets/js/supabase.js` | Datos del panel: login, permisos, autos, fotos (supabase-js 2.45.4 desde jsdelivr) |
 | `assets/js/ui.js` | Tarjetas, ficha, links y mensajes de WhatsApp (lo usan el navegador y el build) |
@@ -43,6 +44,19 @@ Sigue las reglas de la **Plataforma Automotoras** (`~/Proyectos/plataforma-autom
 
 Las columnas que Mar Motors no usa (`destacado`, `etiqueta`, `acepta_permuta`, `equipamiento`…) quedan con su valor por defecto y el panel no las pisa. Mar Motors no tiene datos privados (matrícula, notas): `autos_privado` no se usa.
 
+### Datos del negocio: config ↔ `negocios`
+
+| `config.js` | Base (`negocios`, una fila con `concesionaria = 'mar-motors'`) |
+|---|---|
+| `whatsapp: { intl, display }` | `whatsapp` (`59899123456`) + `telefono` (`099 123 456`) |
+| `direccion` | `direccion` |
+| `horarios` (por día; la franja de arriba, la grilla y Google) | `extra.horarios` (mismo formato) + `horario` (el resumen en texto, lo usan las otras webs) |
+| `zonas` (Google: `areaServed`) | `zonas` |
+| `redes.instagram`, `redes.tiktok`, `redes.facebook` | `instagram`, `tiktok` (usuarios, sin @), `facebook` (link o página) |
+| `barrio`, `telefonoFijo`, `otrosCelulares` | `extra.barrio`, `extra.telefono_fijo`, `extra.otros_celulares` |
+
+Campo vacío (`null`) = queda el valor de `config.js`. El adaptador es `deNegocio` en `modelo.js`.
+
 ## Probarla en tu compu
 
 ```bash
@@ -53,12 +67,13 @@ Abrí http://localhost:8803 (el 8765 y el 8791 los usan otros proyectos). Lee lo
 
 ## WhatsApp
 
-Todos los botones, fichas y formularios mandan al número de `assets/js/config.js`:
+Todos los botones, fichas y formularios mandan al número que cargó el dueño en el panel («Datos del negocio»); si no cargó ninguno, al de `assets/js/config.js`:
 
 ```js
 whatsapp: { display: '091 969 322', intl: '59891969322' },   // prueba
-// whatsapp: { display: '099 322 937', intl: '59899322937' }, // número real del local
 ```
+
+Ningún número está escrito en las plantillas ni en el JS: todo sale de la config (`data-wa`, `data-wa-num`, `data-tel`, `data-tel-num`, `data-otros`, `data-horario`, `data-horarios`, `data-red`; los completa el build y, en lo que se arma en el navegador, `fillContact` de `ui.js`).
 
 Qué mensaje llega en cada caso:
 
@@ -91,7 +106,7 @@ insert into public.admins (email, concesionaria) values ('el-email-del-dueño@ej
 
 ## Otros datos del local
 
-En `assets/js/config.js`: teléfono fijo, otros celulares, dirección y barrio (con dirección aparece el mapa de Google), redes sociales y el bloque de renovación MiAuto (`mostrarRenovacion`). Después de cambiar algo hay que hacer push a `main`.
+Teléfono fijo, otros celulares, dirección y barrio (con dirección aparece el mapa de Google), horarios, zonas y redes: los cambia el dueño desde el panel («Datos del negocio»); los valores de `assets/js/config.js` quedan para lo que no cargó. El bloque de renovación MiAuto (`mostrarRenovacion`) y lo demás de `config.js` se cambian ahí y se publican con un push a `main`.
 
 ## Publicar (GitHub Pages)
 
@@ -99,7 +114,8 @@ En `assets/js/config.js`: teléfono fijo, otros celulares, dirección y barrio (
 
 - en cada push a `main`;
 - **al guardar un auto en el panel**: la base dispara `workflow_dispatch` de `deploy.yml` (trigger `publicar_web`), si Mar Motors tiene `repo` cargado en la tabla `concesionarias` y el repo está en el token de GitHub (ver «Pendiente»);
-- cada 15 minutos, de respaldo: solo publica si los autos cambiaron (compara un hash con `estado.json` de la web publicada). Ese paso también re-habilita el workflow, porque GitHub apaga los programados a los 60 días sin commits.
+- **al guardar los datos del negocio** en el panel (mismo trigger, sobre la tabla `negocios`);
+- cada 15 minutos, de respaldo: solo publica si cambiaron los autos o los datos del negocio (compara un hash con `estado.json` de la web publicada). Ese paso también re-habilita el workflow, porque GitHub apaga los programados a los 60 días sin commits.
 
 Las fotos ya bajadas quedan en la caché de Actions (`.cache/fotos`): solo se bajan las nuevas. Los css/js llevan `?v=<hash>` para que el navegador no mezcle versiones (Pages cachea 10 minutos). Para publicar a mano: Actions → «Publicar» → *Run workflow*.
 

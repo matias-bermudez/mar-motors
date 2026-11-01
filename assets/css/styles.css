@@ -166,6 +166,7 @@ section[id] { scroll-margin-top: 96px; }
 .topbar span { display: flex; align-items: center; gap: 8px; }
 .topbar .tels { gap: 18px; flex-wrap: wrap; }
 .topbar a { color: var(--mute-2); text-decoration: none; white-space: nowrap; }
+.topbar a span { display: inline; } /* el número va en la misma línea que «Tel.» y «WhatsApp» */
 .topbar a:hover { color: #FFFFFF; }
 
 /* ── Encabezado ─────────────────────────────────────────────── */

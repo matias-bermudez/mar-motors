@@ -1,4 +1,7 @@
 // Configuración de la web. Es lo único que hay que tocar para pasar a producción.
+// El WhatsApp, los teléfonos, la dirección, los horarios, las zonas y las redes los puede cambiar el dueño
+// desde el panel («Datos del negocio», tabla `negocios`): al publicar, lo que esté cargado ahí pisa lo de acá
+// (ver deNegocio en modelo.js). Lo de acá queda para lo que el dueño no cargó.
 export const CONFIG = {
   // Número que recibe TODOS los WhatsApp de la web (botones, fichas y formulario).
   // PRUEBA: 091 969 322. Número real del local: { display: '099 322 937', intl: '59899322937' }
@@ -21,7 +24,10 @@ export const CONFIG = {
     tiktok: { url: '', label: 'TikTok' },
   },
 
-  // Horarios para Google (datos estructurados). Si cambian, cambiarlos también en index.html.
+  // Dónde vende (para Google: areaServed). Separadas por coma.
+  zonas: 'Montevideo',
+
+  // Horarios: la franja de arriba, la grilla de «Vení a verlos» y los datos para Google salen de acá.
   horarios: [
     { dias: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'], abre: '09:30', cierra: '19:00' },
     { dias: ['Saturday'], abre: '10:00', cierra: '14:00' },

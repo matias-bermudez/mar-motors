@@ -34,10 +34,10 @@
     <div class="wrap">
       <span>
         <svg class="ico" aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
-        Lun a Vie 9:30 – 19:00 · Sáb 10:00 – 14:00 · Dom 9:30 – 13:30
+        <span data-horario></span>
       </span>
       <span class="tels">
-        <a data-tel="Tel." href="#">Tel. 2303 6119</a>
+        <a data-tel href="#">Tel. <span data-tel-num></span></a>
         <a data-wa="general" href="#">WhatsApp <span data-wa-num></span></a>
       </span>
     </div>
@@ -88,7 +88,7 @@
           <div class="glass">
             <div class="glare-1" aria-hidden="true"></div>
             <div class="glare-2" aria-hidden="true"></div>
-            <div class="strip"><span>Mar Motors</span><span aria-hidden="true">·</span><span>2303 6119</span></div>
+            <div class="strip"><span>Mar Motors</span><span aria-hidden="true">·</span><span data-tel-num></span></div>
             <div class="stem" aria-hidden="true"></div>
             <div class="mirror" aria-hidden="true"></div>
             <div class="writing">
@@ -128,7 +128,7 @@
         <div class="more-row">
           <a class="ig-link" data-red="instagram" href="#">
             <svg class="ico" aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="0.6" fill="currentColor"/></svg>
-            Los que van llegando, en <span data-red-label>@automotoramarmotor</span>
+            Los que van llegando, en <span data-red-label></span>
           </a>
           <button class="chip-btn" type="button" data-ver-mas hidden>Ver todos</button>
         </div>
@@ -306,15 +306,7 @@
       <div class="wrap">
         <h2 class="h-section">Vení a verlos <span class="red">en persona</span></h2>
 
-        <div class="hours">
-          <div data-dia="1"><span class="day">Lunes</span><span class="time">9:30 – 19:00</span></div>
-          <div data-dia="2"><span class="day">Martes</span><span class="time">9:30 – 19:00</span></div>
-          <div data-dia="3"><span class="day">Miércoles</span><span class="time">9:30 – 19:00</span></div>
-          <div data-dia="4"><span class="day">Jueves</span><span class="time">9:30 – 19:00</span></div>
-          <div data-dia="5"><span class="day">Viernes</span><span class="time">9:30 – 19:00</span></div>
-          <div data-dia="6"><span class="day">Sábado</span><span class="time">10:00 – 14:00</span></div>
-          <div data-dia="0" class="sun"><span class="day">Domingo</span><span class="time">9:30 – 13:30</span><span class="note">¡también abrimos!</span></div>
-        </div>
+        <div class="hours" data-horarios></div>
 
         <div class="visit-grid">
           <div class="visit-info">
@@ -334,7 +326,7 @@
                 <span class="lbl"><svg class="ico" aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2"/></svg>Teléfono fijo</span>
                 <span class="num" data-tel-num></span>
               </a>
-              <div class="contact-row">
+              <div class="contact-row" data-otros-fila>
                 <span class="lbl" style="padding-left: 36px">Otros celulares</span>
                 <span class="others" data-otros></span>
               </div>

@@ -6,7 +6,10 @@
 // - una página por auto (autos/<slug>/) con título, descripción, foto y datos estructurados
 // - el inicio con los autos ya escritos, canonical, robots y datos estructurados de la automotora
 // - assets/js/autos.js: los mismos autos para el navegador (filtros, galería, permuta)
-// - sitemap.xml, robots.txt y estado.json (hash de los autos: el cron no republica si no cambió nada)
+// - sitemap.xml, robots.txt y estado.json (hash de los autos y del negocio: el cron no republica si no cambió nada)
+// Los datos del negocio (WhatsApp, teléfonos, dirección, horarios, zonas, redes) salen de config.js, pisados por
+// la fila de la tabla `negocios` que edita el dueño desde el panel: quedan escritos en el HTML y en el
+// assets/js/config.js que usa el navegador (formularios y mensajes de WhatsApp).
 //
 // Uso (sin dependencias, Node 20+):
 //   node scripts/build.mjs                   → para publicar
@@ -18,9 +21,10 @@ import { copyFile, cp, mkdir, readFile, readdir, rm, stat, writeFile } from 'nod
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { CONFIG } from '../assets/js/config.js';
-import { deFila, rutaChica } from '../assets/js/modelo.js';
+import { deFila, rutaChica, aplicarNegocio } from '../assets/js/modelo.js';
 import {
-  LINKS, esc, nombre, ordenar, carCard, fichaHTML, seoAuto, rutaAuto, urlAuto, nombreCarroceria, fmtKm, fmtPrecio,
+  LINKS, MENSAJES, esc, nombre, ordenar, carCard, fichaHTML, seoAuto, rutaAuto, urlAuto, nombreCarroceria, fmtKm, fmtPrecio,
+  waUrl, telUrl, horarioResumen, horariosHTML, barrio,
 } from '../assets/js/ui.js';
 
 const ROOT = fileURLToPath(new URL('../', import.meta.url));
@@ -35,15 +39,32 @@ const BASE = process.argv.includes('--local') ? '/' : SITIO.pathname;
 LINKS.raiz = SITIO;
 
 // ── Datos ────────────────────────────────────────────────────────
-async function leerSupabase() {
-  const url = `${CONFIG.supabaseUrl}/rest/v1/autos?select=*&concesionaria=eq.${encodeURIComponent(CONFIG.concesionaria)}&order=created_at.desc`;
+function consultar(tabla, filtros) {
+  const url = `${CONFIG.supabaseUrl}/rest/v1/${tabla}?select=*&concesionaria=eq.${encodeURIComponent(CONFIG.concesionaria)}${filtros}`;
   // Las claves sb_publishable_ van solo en apikey; las viejas (anon, JWT) también en Authorization.
   const headers = { apikey: CONFIG.supabaseKey };
   if (!CONFIG.supabaseKey.startsWith('sb_')) headers.Authorization = `Bearer ${CONFIG.supabaseKey}`;
-  const res = await fetch(url, { headers });
+  return fetch(url, { headers });
+}
+
+async function leerSupabase() {
+  const res = await consultar('autos', '&order=created_at.desc');
   // Si Supabase falla no publicamos una web vacía: el deploy anterior queda online.
   if (!res.ok) throw new Error(`Supabase respondió ${res.status}: ${await res.text()}`);
   return res.json();
+}
+
+// Datos del negocio que el dueño edita desde el panel. Si la tabla todavía no existe, no hay fila
+// o falla la consulta, se publica con config.js tal cual.
+async function leerNegocio() {
+  try {
+    const res = await consultar('negocios', '');
+    if (res.ok) return (await res.json())[0] || null;
+    console.warn(`Aviso: no se pudieron leer los datos del negocio (${res.status}), se usa config.js.`);
+  } catch (err) {
+    console.warn(`Aviso: no se pudieron leer los datos del negocio (${err.message}), se usa config.js.`);
+  }
+  return null;
 }
 
 // Fila → auto de la web. Si a un auto le falta algo, se saltea con un aviso (no rompe la publicación).
@@ -114,7 +135,7 @@ const jsonld = (data) => `<script type="application/ld+json">${JSON.stringify(da
 function setMeta(html, attr, key, value) {
   const re = new RegExp(`(<meta ${attr}="${key}" content=")[^"]*(")`);
   if (!re.test(html)) throw new Error(`Falta <meta ${attr}="${key}"> en la plantilla`);
-  return html.replace(re, `$1${esc(value)}$2`);
+  return html.replace(re, (m, antes, despues) => antes + esc(value) + despues);
 }
 
 // Completa el <head> de una página. `canonical` vacío = página que no va a Google.
@@ -126,14 +147,14 @@ function seo(html, { canonical, indexable, title, description, ogTitle, ogDescri
     CONFIG.googleVerificacion && `<meta name="google-site-verification" content="${esc(CONFIG.googleVerificacion)}">`,
     ...datos.map(jsonld),
   ].filter(Boolean).join('\n  ');
-  html = html.replace(/<!-- SEO:[^>]*-->/, tags);
+  html = html.replace(/<!-- SEO:[^>]*-->/, () => tags); // función: un $ en los datos no es un patrón de reemplazo
   if (base) {
     const tag = `<base href="${esc(base)}">`;
     html = /<base href="[^"]*">/.test(html)
       ? html.replace(/<base href="[^"]*">(<!--[^>]*-->)?/, tag)
       : html.replace('<meta charset="utf-8">', `<meta charset="utf-8">\n  ${tag}`);
   }
-  if (title) html = html.replace(/<title>[^<]*<\/title>/, `<title>${esc(title)}</title>`);
+  if (title) html = html.replace(/<title>[^<]*<\/title>/, () => `<title>${esc(title)}</title>`);
   if (description) html = setMeta(html, 'name', 'description', description);
   if (ogTitle) html = setMeta(html, 'property', 'og:title', ogTitle);
   if (ogDescription) html = setMeta(html, 'property', 'og:description', ogDescription);
@@ -164,7 +185,7 @@ const automotora = () => ({
     addressRegion: 'Montevideo',
     addressCountry: 'UY',
   },
-  areaServed: { '@type': 'City', name: 'Montevideo' },
+  areaServed: CONFIG.zonas.split(',').map((z) => z.trim()).filter(Boolean).map((name) => ({ '@type': 'Place', name })),
   openingHoursSpecification: CONFIG.horarios.map((h) => ({
     '@type': 'OpeningHoursSpecification',
     dayOfWeek: h.dias.map((d) => `https://schema.org/${d}`),
@@ -255,6 +276,38 @@ async function versionarAssets() {
   }
 }
 
+// ── Datos del local en el HTML ───────────────────────────────────
+// Lo mismo que fillContact (ui.js), pero al armar: WhatsApp, teléfonos, horarios, dirección y redes quedan
+// escritos en el HTML, así Google y quien abra la página sin JavaScript ven los datos de hoy.
+const conHref = (tag, url, nueva) => tag.replace(/\shref="[^"]*"/, ` href="${esc(url)}"${nueva ? ' target="_blank" rel="noopener"' : ''}`);
+const rellenar = (html, attr, contenido) => html.replace(
+  new RegExp(`(<(\\w+)\\b[^>]*\\s${attr}(?=[\\s>])[^>]*>)[^<]*(</\\2>)`, 'g'), (m, abre, tag, cierra) => abre + contenido + cierra);
+
+function datosDelLocal(html) {
+  html = html.replace(/(<a\b[^>]*\sdata-red="(\w+)"[^>]*>)([\s\S]*?<\/a>)/g, (m, tag, red, resto) => {
+    const r = CONFIG.redes[red];
+    if (!r?.url) return tag.replace(/>$/, ' hidden>') + resto;
+    return conHref(tag, r.url) + rellenar(resto, 'data-red-label', esc(r.label));
+  });
+  html = html.replace(/<a\b[^>]*>/g, (tag) => {
+    const wa = tag.match(/\sdata-wa="(\w+)"/);
+    if (wa) return conHref(tag, waUrl(MENSAJES[wa[1]] || MENSAJES.general), true);
+    if (/\sdata-tel(?=[\s>])/.test(tag)) return conHref(tag, telUrl(CONFIG.telefonoFijo));
+    return tag;
+  });
+  html = rellenar(html, 'data-wa-num', esc(CONFIG.whatsapp.display));
+  html = rellenar(html, 'data-tel-num', esc(CONFIG.telefonoFijo.display));
+  html = rellenar(html, 'data-horario', esc(horarioResumen()));
+  html = rellenar(html, 'data-horarios', horariosHTML());
+  html = rellenar(html, 'data-otros', CONFIG.otrosCelulares.map((t) => `<a href="${telUrl(t)}">${esc(t.display)}</a>`).join(''));
+  if (!CONFIG.otrosCelulares.length) html = html.replace(/<div class="contact-row" data-otros-fila>/, '<div class="contact-row" data-otros-fila hidden>');
+  if (CONFIG.direccion) {
+    html = rellenar(html, 'data-direccion', esc(CONFIG.direccion));
+    html = rellenar(html, 'data-barrio', esc(barrio()));
+  }
+  return html;
+}
+
 function inicio(html, autos) {
   html = seo(html, {
     canonical: SITIO.href,
@@ -305,14 +358,16 @@ ${urls.map((u) => `  <url><loc>${esc(u.loc)}</loc><lastmod>${u.lastmod}</lastmod
 }
 
 // ── Armado ───────────────────────────────────────────────────────
+const negocio = await leerNegocio();
+aplicarNegocio(CONFIG, negocio); // antes de armar cualquier cosa: ui.js usa este mismo CONFIG
 const filas = await leerSupabase();
-const hash = createHash('sha256').update(JSON.stringify(filas)).digest('hex').slice(0, 16);
+const hash = createHash('sha256').update(JSON.stringify({ autos: filas, negocio })).digest('hex').slice(0, 16);
 
 if (process.env.SOLO_SI_CAMBIO) {
   const anterior = await fetch(`${abs('estado.json')}?t=${Date.now()}`, { cache: 'no-store' })
     .then((r) => (r.ok ? r.json() : null)).catch(() => null);
   if (anterior?.hash === hash) {
-    console.log('Los autos no cambiaron desde la última publicación: no hay nada para publicar.');
+    console.log('Los autos y los datos del negocio no cambiaron desde la última publicación: no hay nada para publicar.');
     salida('cambio', 'false');
     process.exit(0);
   }
@@ -328,13 +383,15 @@ for (const f of ['assets', 'admin', '.nojekyll']) await cp(`${ROOT}${f}`, `${OUT
 if (!SITIO.hostname.endsWith('.github.io')) await writeFile(`${OUT}CNAME`, `${SITIO.hostname}\n`);
 
 await bajarFotos(autos);
+// El navegador usa la misma config que el build, con los datos del negocio ya aplicados (sin los valores viejos).
+await escribir('assets/js/config.js', `// Generado por scripts/build.mjs: assets/js/config.js${negocio ? ' + datos del negocio de la base (panel → Datos del negocio)' : ''}. No editar.\nexport const CONFIG = ${JSON.stringify(CONFIG, null, 1)};\n`);
 // El navegador (filtros, galería, permuta) usa estos mismos datos: no consulta Supabase.
 await escribir('assets/js/autos.js', `// Generado por scripts/build.mjs desde la base compartida (${CONFIG.concesionaria}). No editar.\nexport const AUTOS = ${JSON.stringify(autos.map(({ extra, ...a }) => a), null, 1)};\n`);
 await versionarAssets();
 
-await escribir('index.html', versionar(inicio(await leer('index.html'), autos)));
+await escribir('index.html', versionar(datosDelLocal(inicio(await leer('index.html'), autos))));
 
-const plantilla = await leer('auto.html');
+const plantilla = datosDelLocal(await leer('auto.html'));
 for (const a of autos) await escribir(`${rutaAuto(a)}index.html`, versionar(paginaAuto(plantilla, a)));
 
 // 404: GitHub Pages lo sirve en cualquier URL que no existe (ej. un auto vendido). Estático, sin JavaScript.

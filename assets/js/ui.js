@@ -194,9 +194,41 @@ export const skeletonCards = (n) => Array.from({ length: n }, () => `
     <div class="car-body"><span></span><span></span></div>
   </article>`).join('');
 
+// ── Horarios ─────────────────────────────────────────────────────
+// Salen de CONFIG.horarios (config.js o «Datos del negocio» del panel). n = getDay() (0 = domingo).
+const DIAS = [
+  ['Monday', 'Lun', 'Lunes', 1], ['Tuesday', 'Mar', 'Martes', 2], ['Wednesday', 'Mié', 'Miércoles', 3],
+  ['Thursday', 'Jue', 'Jueves', 4], ['Friday', 'Vie', 'Viernes', 5], ['Saturday', 'Sáb', 'Sábado', 6], ['Sunday', 'Dom', 'Domingo', 0],
+].map(([schema, corto, largo, n]) => ({ schema, corto, largo, n }));
+const hora = (h) => h.replace(/^0(?=\d)/, '');
+const rango = (h) => `${hora(h.abre)} – ${hora(h.cierra)}`;
+
+// Para la franja de arriba: "Lun a Vie 9:30 – 19:00 · Sáb 10:00 – 14:00 · Dom 9:30 – 13:30".
+export function horarioResumen() {
+  if (CONFIG.horarioTexto) return CONFIG.horarioTexto;
+  return CONFIG.horarios.map((h) => {
+    const i = DIAS.flatMap((d, k) => (h.dias.includes(d.schema) ? [k] : []));
+    const seguidos = i.every((x, k) => !k || x === i[k - 1] + 1);
+    const dias = i.length > 2 && seguidos
+      ? `${DIAS[i[0]].corto} a ${DIAS[i.at(-1)].corto}`
+      : i.map((x) => DIAS[x].corto).join(i.length === 2 ? ' y ' : ', ');
+    return `${dias} ${rango(h)}`;
+  }).join(' · ');
+}
+
+// Grilla de «Vení a verlos»: un casillero por día. El domingo abierto va destacado.
+export const horariosHTML = () => DIAS.map((d) => {
+  const h = CONFIG.horarios.find((x) => x.dias.includes(d.schema));
+  const domingo = d.n === 0 && h;
+  return `<div data-dia="${d.n}"${domingo ? ' class="sun"' : ''}><span class="day">${d.largo}</span><span class="time">${h ? rango(h) : 'Cerrado'}</span>${domingo ? '<span class="note">¡también abrimos!</span>' : ''}</div>`;
+}).join('');
+
 // ── Datos del local en el HTML ───────────────────────────────────
+// scripts/build.mjs ya los deja escritos en el HTML (datosDelLocal); esto los completa en lo que se arma
+// en el navegador (patio, auto no encontrado) y agrega lo que depende del día (hoy, año) y el mapa.
 // [data-wa="clave"] → link de WhatsApp con el mensaje MENSAJES[clave]
-// [data-wa-num] → número que se muestra; [data-tel] → teléfono fijo; [data-otros] → otros celulares
+// [data-wa-num] → número de WhatsApp que se muestra; [data-tel] → link al fijo; [data-tel-num] → el fijo
+// [data-otros] → otros celulares; [data-red="instagram"] → red social; [data-horario], [data-horarios] → horarios
 export function fillContact(root = document) {
   $$('[data-wa]', root).forEach((el) => {
     el.href = waUrl(MENSAJES[el.dataset.wa] || MENSAJES.general);
@@ -204,24 +236,24 @@ export function fillContact(root = document) {
     el.rel = 'noopener';
   });
   $$('[data-wa-num]', root).forEach((el) => { el.textContent = CONFIG.whatsapp.display; });
-  $$('[data-tel]', root).forEach((el) => {
-    el.href = telUrl(CONFIG.telefonoFijo);
-    const n = $('[data-tel-num]', el) || el;
-    n.textContent = el.dataset.tel ? `${el.dataset.tel} ${CONFIG.telefonoFijo.display}` : CONFIG.telefonoFijo.display;
-  });
+  $$('[data-tel]', root).forEach((el) => { el.href = telUrl(CONFIG.telefonoFijo); });
+  $$('[data-tel-num]', root).forEach((el) => { el.textContent = CONFIG.telefonoFijo.display; });
   $$('[data-otros]', root).forEach((el) => {
     el.innerHTML = CONFIG.otrosCelulares.map((t) => `<a href="${telUrl(t)}">${esc(t.display)}</a>`).join('');
     el.closest('.contact-row').hidden = !CONFIG.otrosCelulares.length;
   });
   $$('[data-red]', root).forEach((el) => {
     const red = CONFIG.redes[el.dataset.red];
-    if (!red?.url) { el.hidden = true; return; }
+    el.hidden = !red?.url;
+    if (!red?.url) return;
     el.href = red.url;
     const l = $('[data-red-label]', el);
     if (l) l.textContent = red.label;
   });
+  $$('[data-horario]', root).forEach((el) => { el.textContent = horarioResumen(); });
+  $$('[data-horarios]', root).forEach((el) => { el.innerHTML = horariosHTML(); });
   $$('[data-direccion]', root).forEach((el) => { if (CONFIG.direccion) el.textContent = CONFIG.direccion; });
-  $$('[data-barrio]', root).forEach((el) => { if (CONFIG.direccion) el.textContent = [CONFIG.barrio, 'Montevideo'].filter(Boolean).join(', '); });
+  $$('[data-barrio]', root).forEach((el) => { if (CONFIG.direccion) el.textContent = barrio(); });
   const map = $('[data-mapa]', root);
   if (map && CONFIG.direccion) {
     const q = encodeURIComponent([CONFIG.direccion, CONFIG.barrio, 'Montevideo, Uruguay'].filter(Boolean).join(', '));
@@ -234,6 +266,8 @@ export function fillContact(root = document) {
   const y = $('[data-anio]', root);
   if (y) y.textContent = new Date().getFullYear();
 }
+
+export const barrio = () => [CONFIG.barrio, 'Montevideo'].filter(Boolean).join(', ');
 
 export function toast(text) {
   const t = document.createElement('div');
