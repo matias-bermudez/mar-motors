@@ -1,11 +1,14 @@
 // Panel del dueño (/admin/): login, lista, alta/edición/baja y fotos de los autos de Mar Motors
 // en la base compartida (ver supabase.js). Los permisos los pone la base: solo los emails de la tabla
 // admins con 'mar-motors' (o '*') pueden escribir. Cada cambio publica la web solo (unos 2 minutos).
+import { CONFIG } from './config.js';
 import {
   configured, session, login, logout, puedeEditar, listTodos, guardarAuto, borrarAuto, subirFoto, borrarFotos, urlFoto,
+  leerNegocio, guardarNegocio,
 } from './supabase.js';
+import { aplicarNegocio, telefonoUY } from './modelo.js';
 import {
-  $, $$, esc, CARROCERIAS, COMBUSTIBLES, CAJAS, LINKS, nombre, fmtKm, fmtPrecio, urlAuto, toast,
+  $, $$, esc, CARROCERIAS, COMBUSTIBLES, CAJAS, DIAS, LINKS, nombre, fmtKm, fmtPrecio, urlAuto, toast, resumirHorarios,
 } from './ui.js';
 
 const vistas = $$('[data-vista]');
@@ -14,7 +17,7 @@ const mostrar = (v) => vistas.forEach((el) => { el.hidden = el.dataset.vista !==
 let autos = [];
 let editando = null;   // auto que se está editando (null = nuevo)
 let fotos = [];        // [{ ruta }] ya subidas (ruta en el bucket) o [{ file, preview }] nuevas
-let sucio = false;     // cambios sin guardar en el editor
+let sucio = false;     // cambios sin guardar en el editor o en Datos del negocio
 
 // ── Arranque y login ─────────────────────────────────────────────
 async function iniciar() {
@@ -191,6 +194,154 @@ lista.addEventListener('click', async (e) => {
 });
 
 $('[data-nuevo]').addEventListener('click', () => abrirEditor(null));
+
+// ── Datos del negocio ────────────────────────────────────────────
+// Una fila en la tabla `negocios`: al publicar pisa a config.js en toda la web (WhatsApp de todos los
+// botones y mensajes, teléfonos, dirección, horarios, redes). Guardarla republica la web sola.
+const fNegocio = $('[data-negocio]');
+const errNegocio = $('[data-negocio-error]');
+let filaNegocio = null;
+
+$('[data-horarios-panel]').innerHTML = DIAS.map((d) => `
+  <div class="adm-horario" data-dia="${d.schema}">
+    <b class="dia">${d.largo}</b>
+    <label class="abre"><span class="sr-only">${d.largo}: abre</span><input type="time" name="abre-${d.schema}" step="900"></label>
+    <span class="a" aria-hidden="true">a</span>
+    <label class="cierra"><span class="sr-only">${d.largo}: cierra</span><input type="time" name="cierra-${d.schema}" step="900"></label>
+    <label class="adm-check"><input type="checkbox" name="cerrado-${d.schema}"><span>Cerrado</span></label>
+  </div>`).join('');
+
+const cerrado = (dia, si) => {
+  const f = fNegocio.elements;
+  f[`cerrado-${dia}`].checked = si;
+  f[`abre-${dia}`].disabled = si;
+  f[`cierra-${dia}`].disabled = si;
+};
+
+// Usuario de una red: "@marmotors" o el link entero → "marmotors".
+const usuarioRed = (v) => String(v || '').trim().replace(/^https?:\/\/(www\.)?[^/]+\/@?/, '').replace(/^@/, '').replace(/[/?#].*$/, '');
+
+$('[data-abrir-negocio]').addEventListener('click', async () => {
+  errNegocio.textContent = '';
+  fNegocio.reset();
+  $$('[aria-invalid]', fNegocio).forEach((el) => el.removeAttribute('aria-invalid'));
+  mostrar('negocio');
+  scrollTo({ top: 0 });
+  try {
+    filaNegocio = await leerNegocio();
+  } catch (err) {
+    console.error(err);
+    filaNegocio = null;
+    errNegocio.textContent = `No se pudieron leer los datos guardados (${err.message}). Se muestran los de la web.`;
+  }
+  // Se muestra lo que publica la web: config.js con la fila de la base encima.
+  const c = aplicarNegocio(structuredClone(CONFIG), filaNegocio);
+  const f = fNegocio.elements;
+  f.whatsapp.value = c.whatsapp.display;
+  f.fijo.value = c.telefonoFijo?.display || '';
+  f.otros.value = (c.otrosCelulares || []).map((t) => t.display).join(', ');
+  f.direccion.value = c.direccion || '';
+  f.barrio.value = c.barrio || '';
+  f.zonas.value = c.zonas || '';
+  f.instagram.value = filaNegocio?.instagram || usuarioRed(c.redes.instagram?.url);
+  f.tiktok.value = filaNegocio?.tiktok || usuarioRed(c.redes.tiktok?.url);
+  f.facebook.value = c.redes.facebook?.url || '';
+  for (const d of DIAS) {
+    const h = c.horarios.find((x) => x.dias.includes(d.schema));
+    f[`abre-${d.schema}`].value = h?.abre || '';
+    f[`cierra-${d.schema}`].value = h?.cierra || '';
+    cerrado(d.schema, !h);
+  }
+  sucio = false;
+});
+
+fNegocio.addEventListener('input', (e) => {
+  sucio = true;
+  e.target.removeAttribute('aria-invalid');
+  if (e.target.name?.startsWith('cerrado-')) cerrado(e.target.name.slice(8), e.target.checked);
+});
+
+$$('[data-volver-negocio]').forEach((b) => b.addEventListener('click', () => {
+  if (sucio && !confirm('Tenés cambios sin guardar. ¿Descartarlos?')) return;
+  sucio = false;
+  mostrar('lista');
+}));
+
+// Días con el mismo horario van juntos, como en config.js: [{ dias: ['Monday', …], abre: '09:30', cierra: '19:00' }].
+function leerHorarios(malos) {
+  const f = fNegocio.elements;
+  const grupos = new Map();
+  for (const d of DIAS) {
+    if (f[`cerrado-${d.schema}`].checked) continue;
+    const abre = f[`abre-${d.schema}`];
+    const cierra = f[`cierra-${d.schema}`];
+    if (!abre.value || !cierra.value || abre.value >= cierra.value) {
+      malos.push([abre.value ? cierra : abre, `Revisá el horario del ${d.largo.toLowerCase()} (o marcalo como cerrado).`]);
+      continue;
+    }
+    const k = `${abre.value}-${cierra.value}`;
+    if (!grupos.has(k)) grupos.set(k, { dias: [], abre: abre.value, cierra: cierra.value });
+    grupos.get(k).dias.push(d.schema);
+  }
+  return [...grupos.values()];
+}
+
+fNegocio.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const f = fNegocio.elements;
+  const texto = (v) => v.trim() || null;
+  const malos = [];
+  // El número se escribe como en Uruguay y se guarda whatsapp = 59899123456, telefono = "099 123 456".
+  const wa = telefonoUY(f.whatsapp.value);
+  if (!wa) malos.push([f.whatsapp, 'El WhatsApp tiene que ser un celular de Uruguay, por ejemplo 099 123 456.']);
+  const fijo = texto(f.fijo.value) && telefonoUY(f.fijo.value);
+  if (texto(f.fijo.value) && !fijo) malos.push([f.fijo, 'El teléfono fijo tiene que ser de Uruguay, por ejemplo 2900 1234.']);
+  const otros = f.otros.value.split(/[,;\n]+/).map((t) => t.trim()).filter(Boolean).map(telefonoUY);
+  if (otros.some((t) => !t)) malos.push([f.otros, 'Revisá los otros celulares: van separados por coma, por ejemplo 099 111 222, 098 333 444.']);
+  const horarios = leerHorarios(malos);
+  if (!malos.length && !horarios.length) malos.push([f['cerrado-Monday'], 'Tiene que haber al menos un día abierto.']);
+  malos.forEach(([el]) => el.setAttribute('aria-invalid', 'true'));
+  if (malos.length) {
+    errNegocio.textContent = malos[0][1];
+    malos[0][0].focus();
+    return;
+  }
+
+  const fila = {
+    ...wa,
+    direccion: texto(f.direccion.value),
+    horario: resumirHorarios(horarios),
+    zonas: texto(f.zonas.value),
+    instagram: texto(usuarioRed(f.instagram.value)),
+    tiktok: texto(usuarioRed(f.tiktok.value)),
+    facebook: texto(f.facebook.value),
+    // Se conserva lo que otra herramienta haya guardado en extra.
+    extra: {
+      ...filaNegocio?.extra,
+      barrio: texto(f.barrio.value),
+      telefono_fijo: fijo?.telefono || null,
+      otros_celulares: otros.length ? otros.map((t) => t.telefono) : null,
+      horarios,
+    },
+  };
+  const btn = $('[data-guardar-negocio]');
+  btn.disabled = true;
+  errNegocio.textContent = '';
+  try {
+    await guardarNegocio(fila);
+    filaNegocio = { ...filaNegocio, ...fila };
+    sucio = false;
+    toast('Guardado. En un par de minutos se actualiza en toda la web.');
+    mostrar('lista');
+  } catch (err) {
+    console.error(err);
+    errNegocio.textContent = /row-level security/i.test(err.message)
+      ? 'No tenés permiso para guardar: tu email no está en la tabla admins de la base (ver README).'
+      : `No se pudo guardar: ${err.message}`;
+  } finally {
+    btn.disabled = false;
+  }
+});
 
 // ── Editor ───────────────────────────────────────────────────────
 const form = $('[data-editor]');

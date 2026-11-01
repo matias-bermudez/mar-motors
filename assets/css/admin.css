@@ -33,7 +33,7 @@ body.admin { background: var(--paper); color: var(--navy); min-height: 100vh; }
 .adm-form { display: flex; flex-direction: column; gap: 16px; }
 .adm-field { display: flex; flex-direction: column; gap: 6px; }
 .adm-field > span { font-family: var(--f-cond); font-weight: 700; font-size: 14px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--slate); }
-.adm-field input, .adm-field select, .adm-field textarea, .adm-search {
+.adm-field input, .adm-field select, .adm-field textarea, .adm-search, .adm-horario input[type="time"] {
   min-height: 46px;
   width: 100%;
   padding: 10px 12px;
@@ -44,7 +44,7 @@ body.admin { background: var(--paper); color: var(--navy); min-height: 100vh; }
   font: 500 17px var(--f-body);
 }
 .adm-field textarea { resize: vertical; line-height: 1.45; }
-.adm-field input:focus, .adm-field select:focus, .adm-field textarea:focus, .adm-search:focus { border-color: var(--navy); outline: none; }
+.adm-field input:focus, .adm-field select:focus, .adm-field textarea:focus, .adm-search:focus, .adm-horario input:focus { border-color: var(--navy); outline: none; }
 .adm-field [aria-invalid="true"] { border-color: var(--red-2); }
 .adm-check { display: flex; align-items: center; gap: 10px; min-height: 46px; font-weight: 600; cursor: pointer; align-self: end; }
 .adm-check input { width: 22px; height: 22px; accent-color: var(--red-2); }
@@ -161,4 +161,20 @@ body.admin { background: var(--paper); color: var(--navy); min-height: 100vh; }
 .adm-progress:empty { display: none; }
 .adm-cancel { color: var(--navy); border-color: #CFCCC4; }
 .adm-cancel:hover { color: var(--navy); border-color: var(--navy); }
+/* Datos del negocio */
+.adm-intro { margin-top: 12px; max-width: 70ch; }
+.adm-grid-full { grid-column: 1 / -1; margin: 0; }
+.adm-horarios { display: flex; flex-direction: column; gap: 10px; }
+.adm-horario { display: grid; grid-template-columns: 120px minmax(0, 1fr) auto minmax(0, 1fr) auto; grid-template-areas: "dia abre a cierra cerrado"; align-items: center; gap: 6px 12px; }
+.adm-horario .dia { grid-area: dia; font-family: var(--f-cond); font-weight: 800; font-size: 19px; text-transform: uppercase; }
+.adm-horario .abre { grid-area: abre; }
+.adm-horario .a { grid-area: a; color: var(--slate); }
+.adm-horario .cierra { grid-area: cierra; }
+.adm-horario .adm-check { grid-area: cerrado; align-self: center; }
+.adm-horario [aria-invalid="true"] { border-color: var(--red-2); }
+.adm-horario input:disabled { opacity: 0.35; }
+@media (max-width: 560px) {
+  .adm-horario { grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); grid-template-areas: "dia dia cerrado" "abre a cierra"; padding-bottom: 10px; border-bottom: 1px solid #E7E4DC; }
+  .adm-horario .adm-check { justify-self: end; min-height: 40px; }
+}
 .admin .toast { background: var(--navy); color: #FFFFFF; }

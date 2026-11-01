@@ -62,9 +62,56 @@
           <option value="vendido">Vendidos</option>
           <option value="oculto">Ocultos</option>
         </select>
+        <button class="chip-btn adm-cancel" type="button" data-abrir-negocio>Datos del negocio</button>
         <button class="btn btn-red" type="button" data-nuevo>+ Cargar auto</button>
       </div>
       <div class="adm-list" data-lista aria-live="polite"></div>
+    </section>
+
+    <!-- Datos del negocio: tabla `negocios`, pisa a config.js en toda la web al publicar -->
+    <section data-vista="negocio" hidden>
+      <button class="back adm-back" type="button" data-volver-negocio>
+        <svg class="ico" aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="M11 6l-6 6 6 6"/></svg>
+        Volver al listado
+      </button>
+      <h1 class="adm-h1">Datos del negocio</h1>
+      <p class="adm-help adm-intro">Lo que cambies acá se actualiza en toda la web en un par de minutos: botones y mensajes de WhatsApp, teléfonos, horarios, dirección y redes. Si dejás un campo vacío, queda el dato que ya tenía la web.</p>
+
+      <form class="adm-editor" data-negocio novalidate>
+        <fieldset class="adm-card adm-grid">
+          <legend>Contacto</legend>
+          <label class="adm-field"><span>WhatsApp *</span><input name="whatsapp" type="tel" inputmode="tel" placeholder="099 123 456" autocomplete="off" required></label>
+          <label class="adm-field"><span>Teléfono fijo</span><input name="fijo" type="tel" inputmode="tel" placeholder="2900 1234" autocomplete="off"></label>
+          <label class="adm-field"><span>Otros celulares</span><input name="otros" type="text" inputmode="tel" placeholder="099 111 222, 098 333 444" autocomplete="off"></label>
+          <p class="adm-help adm-grid-full">Al WhatsApp llegan todas las consultas de la web. Escribí los números como siempre: 099 123 456.</p>
+        </fieldset>
+
+        <fieldset class="adm-card adm-grid">
+          <legend>El local</legend>
+          <label class="adm-field"><span>Dirección</span><input name="direccion" maxlength="200" placeholder="Av. Ejemplo 1234" autocomplete="off"></label>
+          <label class="adm-field"><span>Barrio</span><input name="barrio" maxlength="100" placeholder="Cerrito" autocomplete="off"></label>
+          <label class="adm-field"><span>Zonas</span><input name="zonas" maxlength="200" placeholder="Montevideo, Canelones" autocomplete="off"></label>
+          <p class="adm-help adm-grid-full">Con dirección aparece el mapa de Google en la web. Las zonas son para Google: dónde vendés.</p>
+        </fieldset>
+
+        <fieldset class="adm-card">
+          <legend>Horarios</legend>
+          <div class="adm-horarios" data-horarios-panel></div>
+        </fieldset>
+
+        <fieldset class="adm-card adm-grid">
+          <legend>Redes</legend>
+          <label class="adm-field"><span>Instagram</span><input name="instagram" maxlength="100" placeholder="usuario, sin @" autocomplete="off" autocapitalize="off"></label>
+          <label class="adm-field"><span>TikTok</span><input name="tiktok" maxlength="100" placeholder="usuario, sin @" autocomplete="off" autocapitalize="off"></label>
+          <label class="adm-field"><span>Facebook</span><input name="facebook" maxlength="200" placeholder="link de la página" autocomplete="off" autocapitalize="off"></label>
+        </fieldset>
+
+        <div class="adm-savebar">
+          <p class="adm-error" data-negocio-error role="alert"></p>
+          <button class="chip-btn adm-cancel" type="button" data-volver-negocio>Cancelar</button>
+          <button class="btn btn-red" type="submit" data-guardar-negocio>Guardar</button>
+        </div>
+      </form>
     </section>
 
     <!-- Editor -->

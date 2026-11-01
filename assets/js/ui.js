@@ -196,17 +196,17 @@ export const skeletonCards = (n) => Array.from({ length: n }, () => `
 
 // ── Horarios ─────────────────────────────────────────────────────
 // Salen de CONFIG.horarios (config.js o «Datos del negocio» del panel). n = getDay() (0 = domingo).
-const DIAS = [
+export const DIAS = [
   ['Monday', 'Lun', 'Lunes', 1], ['Tuesday', 'Mar', 'Martes', 2], ['Wednesday', 'Mié', 'Miércoles', 3],
   ['Thursday', 'Jue', 'Jueves', 4], ['Friday', 'Vie', 'Viernes', 5], ['Saturday', 'Sáb', 'Sábado', 6], ['Sunday', 'Dom', 'Domingo', 0],
 ].map(([schema, corto, largo, n]) => ({ schema, corto, largo, n }));
 const hora = (h) => h.replace(/^0(?=\d)/, '');
 const rango = (h) => `${hora(h.abre)} – ${hora(h.cierra)}`;
 
-// Para la franja de arriba: "Lun a Vie 9:30 – 19:00 · Sáb 10:00 – 14:00 · Dom 9:30 – 13:30".
-export function horarioResumen() {
-  if (CONFIG.horarioTexto) return CONFIG.horarioTexto;
-  return CONFIG.horarios.map((h) => {
+// "Lun a Vie 9:30 – 19:00 · Sáb 10:00 – 14:00 · Dom 9:30 – 13:30" (la franja de arriba y `horario` en la base).
+export const horarioResumen = () => CONFIG.horarioTexto || resumirHorarios(CONFIG.horarios);
+export function resumirHorarios(horarios) {
+  return horarios.map((h) => {
     const i = DIAS.flatMap((d, k) => (h.dias.includes(d.schema) ? [k] : []));
     const seguidos = i.every((x, k) => !k || x === i[k - 1] + 1);
     const dias = i.length > 2 && seguidos

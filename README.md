@@ -102,6 +102,7 @@ insert into public.admins (email, concesionaria) values ('el-email-del-dueño@ej
 - La dirección del auto (`autos/<slug>/`) se arma sola con marca-modelo-año (con `-2`, `-3` si ya hay otro igual) y se actualiza si cambian esos datos.
 - Fotos: se achican en el navegador (1600 px, JPEG 0.82, y una de 640 px para las tarjetas), se ordenan con flechas y la primera es la portada. Al quitar una foto o borrar el auto se borran las dos medidas del bucket.
 - Desde el listado: cambiar estado, publicar/ocultar, ver la ficha y copiar el link para compartir. Un auto recién guardado dice «Actualizando la web…» hasta que sale publicado (un par de minutos).
+- **Datos del negocio** (botón junto a «+ Cargar auto»): WhatsApp, teléfono fijo, otros celulares, dirección, barrio, zonas, horarios por día y redes. Hace upsert de la fila de `negocios` (`onConflict: concesionaria`) y la base republica la web. Los números se escriben como en Uruguay («095 407 252») y se guardan `whatsapp = 59895407252`, `telefono = 095 407 252` (`telefonoUY` en `modelo.js`, igual que DN). Se abre con lo que publica la web hoy.
 - Los autos ocultos solo los ve el admin (sirve para dejarlos listos antes de publicarlos). **Los vendidos salen de la web**: su link cae en la página 404.
 
 ## Otros datos del local

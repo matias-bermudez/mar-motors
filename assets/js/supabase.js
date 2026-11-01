@@ -88,6 +88,22 @@ export async function borrarAuto(auto) {
   await borrarFotos(auto.fotos);
 }
 
+// ── Datos del negocio ────────────────────────────────────────────
+// Una fila por automotora en `negocios` (WhatsApp, teléfonos, dirección, horarios, redes; ver deNegocio en
+// modelo.js). Al publicar pisa a config.js en toda la web; guardarla dispara la publicación.
+export async function leerNegocio() {
+  const sb = await db();
+  const { data, error } = await sb.from('negocios').select('*').eq('concesionaria', CONCESIONARIA).maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+export async function guardarNegocio(fila) {
+  const sb = await db();
+  const { error } = await sb.from('negocios').upsert({ ...fila, concesionaria: CONCESIONARIA }, { onConflict: 'concesionaria' });
+  if (error) throw error;
+}
+
 // ── Fotos ────────────────────────────────────────────────────────
 // En el bucket `fotos`: mar-motors/<uuid>.jpg (1600 px) y mar-motors/<uuid>_m.jpg (640 px, tarjetas).
 // En la base se guarda solo la ruta de la grande; el build las baja al sitio.
