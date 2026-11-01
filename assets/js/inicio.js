@@ -42,7 +42,8 @@ filtrosEl.addEventListener('click', (e) => {
 });
 verMas.addEventListener('click', () => { todos = true; render(); });
 
-grid.innerHTML = skeletonCards(3);
+// En la web publicada los autos ya vienen en el HTML (para Google); si no, mostramos el esqueleto.
+if (!grid.children.length) grid.innerHTML = skeletonCards(3);
 listAutos()
   .then((data) => { autos = ordenar(data); render(); })
   .catch((err) => {

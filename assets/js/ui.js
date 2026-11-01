@@ -35,9 +35,18 @@ const PESO = { disponible: 0, reservado: 1, vendido: 2 };
 export const ordenar = (autos) => [...autos].sort((x, y) => (PESO[x.estado] ?? 0) - (PESO[y.estado] ?? 0));
 
 // ── Links ────────────────────────────────────────────────────────
-const RAIZ = new URL('../../', import.meta.url);
-export const urlAuto = (a) => new URL(`auto.html?id=${encodeURIComponent(a.id)}`, RAIZ).href;
-export const urlPermuta = (a) => new URL(`index.html?auto=${encodeURIComponent(a.id)}#permuta`, RAIZ).href;
+// En la web publicada (armada por scripts/build.mjs, que marca <html data-estatico>) cada auto tiene su
+// página propia: autos/12-chevrolet-onix-lt-1-4-2019/. Sin armar (probando en la compu) se usa auto.html?id=12.
+export const LINKS = {
+  raiz: new URL('../../', import.meta.url),
+  estatico: typeof document !== 'undefined' && document.documentElement.hasAttribute('data-estatico'),
+};
+export const slug = (a) => `${a.marca} ${a.modelo} ${a.anio}`
+  .normalize('NFD').replace(/[̀-ͯ]/g, '')
+  .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+export const rutaAuto = (a) => `autos/${a.id}-${slug(a)}/`;
+export const urlAuto = (a) => new URL(LINKS.estatico ? rutaAuto(a) : `auto.html?id=${encodeURIComponent(a.id)}`, LINKS.raiz).href;
+export const urlPermuta = (a) => new URL(`./?auto=${encodeURIComponent(a.id)}#permuta`, LINKS.raiz).href;
 // api.whatsapp.com y no wa.me: la redirección de wa.me rompe los emojis (🚗 → �).
 export const waUrl = (text) => `https://api.whatsapp.com/send?phone=${CONFIG.whatsapp.intl}${text ? `&text=${encodeURIComponent(text)}` : ''}`;
 export const telUrl = (t) => `tel:+${t.intl}`;
@@ -82,6 +91,76 @@ export const MENSAJES = {
   busco: `${HOLA}Estoy buscando un auto y no lo vi en la web. Busco: `,
 };
 
+export const ICON = {
+  wa: '<svg class="ico" aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20l1.4-4A8 8 0 1 1 8.3 19z"/><path d="M9.5 9.5c.3 2 1.8 3.7 4 4.3l1-1.2 1.8.8"/></svg>',
+  share: '<svg class="ico" aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/></svg>',
+  prev: '<svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg>',
+  next: '<svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>',
+};
+
+// ── Ficha del auto ───────────────────────────────────────────────
+// HTML de la ficha. Lo usa el navegador (ficha.js) y scripts/build.mjs para que Google lo vea sin JavaScript.
+export function fichaHTML(a) {
+  const tag = etiqueta(a);
+  const fotos = a.fotos || [];
+  const vendido = a.estado === 'vendido';
+  const specs = [
+    ['Año', a.anio],
+    ['Kilómetros', fmtKm(a.km)],
+    ['Combustible', a.combustible],
+    ['Caja', a.caja],
+    ['Motor', a.motor],
+    ['Carrocería', CARROCERIAS[a.carroceria]?.label],
+    ['Color', a.color],
+    ['Puertas', a.puertas],
+  ].filter(([, v]) => v !== null && v !== undefined && v !== '');
+
+  return `
+    <div class="detail-grid">
+      <div class="gallery">
+        <div class="gallery-main" data-main>
+          ${fotos.length ? `<img src="${esc(fotos[0])}" alt="${esc(`${nombre(a)} ${a.anio}, foto 1 de ${fotos.length}`)}" draggable="false">` : NO_PHOTO}
+          ${fotos.length > 1 ? `
+            <button class="gallery-nav prev" type="button" data-prev aria-label="Foto anterior">${ICON.prev}</button>
+            <button class="gallery-nav next" type="button" data-next aria-label="Foto siguiente">${ICON.next}</button>
+            <span class="gallery-count" data-count></span>` : ''}
+        </div>
+        ${fotos.length > 1 ? `<div class="thumbs" role="group" aria-label="Fotos">${fotos.map((f, i) => `
+          <button type="button" data-thumb="${i}" aria-label="Ver foto ${i + 1}"><img src="${esc(f)}" alt="" loading="lazy"></button>`).join('')}</div>` : ''}
+      </div>
+
+      <div class="info">
+        <span class="tag tag-inline ${tag.cls}">${esc(tag.text)}</span>
+        <h1>${esc(nombre(a))}<small>${esc(a.anio)} · ${esc(fmtKm(a.km))}</small></h1>
+        <div class="big-price">${esc(fmtPrecio(a))}<small>${vendido ? 'Vendido' : 'Aceptamos tu usado y financiamos'}</small></div>
+        ${vendido ? '<p class="sold-banner">Este auto ya se vendió. Escribinos y te avisamos si entra uno parecido.</p>' : ''}
+        ${a.estado === 'reservado' ? '<p class="sold-banner">Este auto está reservado. Consultanos: a veces se libera.</p>' : ''}
+        <dl class="specs">${specs.map(([k, v]) => `<div><dt>${esc(k)}</dt><dd>${esc(v)}</dd></div>`).join('')}</dl>
+        <div class="btn-col">
+          <a class="btn btn-red btn-lg btn-block" href="${esc(waUrl(msgConsulta(a)))}" target="_blank" rel="noopener" data-consultar>
+            ${ICON.wa}${vendido ? 'Pedir uno similar' : 'Consultar por WhatsApp'}
+          </a>
+          ${vendido ? '' : `
+          <div class="row2">
+            <a class="chip-btn" href="${esc(waUrl(msgFinanciar(a)))}" target="_blank" rel="noopener">Financiarlo</a>
+            <a class="chip-btn" href="${esc(urlPermuta(a))}">Permutar mi auto</a>
+          </div>`}
+          <button class="chip-btn" type="button" data-compartir style="justify-content: center">${ICON.share}Compartir</button>
+        </div>
+        <span class="ref">Ref. #${esc(a.id)} · El mensaje de WhatsApp ya lleva el link de este auto.</span>
+      </div>
+    </div>
+    ${a.descripcion ? `<div class="desc"><h2>Sobre este auto</h2><p>${esc(a.descripcion)}</p></div>` : ''}`;
+}
+
+// Título y descripción para Google y las vistas previas.
+export function seoAuto(a) {
+  const title = `${nombre(a)} ${a.anio}${a.estado === 'vendido' ? ' (vendido)' : ''} · ${fmtKm(a.km)} | Mar Motors`;
+  const precio = a.precio ? `${fmtPrecio(a)}. ` : '';
+  const description = `${nombre(a)} ${a.anio} usado en venta en Montevideo: ${[fmtKm(a.km), ...[a.combustible, a.caja, a.color].filter(Boolean).map((x) => x.toLowerCase())].join(', ')}. ${precio}Aceptamos tu usado y financiamos. Consultalo por WhatsApp.`;
+  return { title, description };
+}
+
 // ── Tarjeta del patio ────────────────────────────────────────────
 const ICON_WA = '<svg class="ico" aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20l1.4-4A8 8 0 1 1 8.3 19z"></path></svg>';
 export const NO_PHOTO = '<span class="no-photo">Foto próximamente</span>';
@@ -94,7 +173,7 @@ export function carCard(a) {
   return `
     <article class="car${vendido ? ' is-vendido' : ''}">
       <a class="car-photo${foto ? ' has-img' : ''}" href="${href}" tabindex="-1" aria-hidden="true">
-        ${foto ? `<img src="${esc(foto)}" alt="" loading="lazy" decoding="async">` : NO_PHOTO}
+        ${foto ? `<img src="${esc(foto)}" alt="${esc(`${nombre(a)} ${a.anio}`)}" loading="lazy" decoding="async">` : NO_PHOTO}
         <span class="tag ${tag.cls}">${esc(tag.text)}</span>
         <span class="marker"><span class="price">${esc(fmtPrecio(a))}</span><span class="meta">${esc(a.anio)} · ${esc(fmtKm(a.km))}</span></span>
       </a>

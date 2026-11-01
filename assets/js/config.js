@@ -21,6 +21,22 @@ export const CONFIG = {
     tiktok: { url: '', label: 'TikTok' },
   },
 
+  // Horarios para Google (datos estructurados). Si cambian, cambiarlos también en index.html.
+  horarios: [
+    { dias: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'], abre: '09:30', cierra: '19:00' },
+    { dias: ['Saturday'], abre: '10:00', cierra: '14:00' },
+    { dias: ['Sunday'], abre: '09:30', cierra: '13:30' },
+  ],
+
+  // ── SEO ──
+  // Dirección pública de la web, con / al final. Se usa en Google, el sitemap y las vistas previas de WhatsApp.
+  // Con dominio propio: 'https://www.marmotors.com.uy/' (y el archivo CNAME, ver README).
+  sitioUrl: 'https://matias-bermudez.github.io/mar-motors/',
+  // false = modo prueba: la web se puede abrir con el link pero Google no la indexa. Al lanzar, poner true.
+  indexar: false,
+  // Google Search Console → verificación por etiqueta HTML: solo el código del content="…".
+  googleVerificacion: '',
+
   // Bloque "¿Ya cumpliste un año con tu préstamo en MiAuto?"
   mostrarRenovacion: true,
 
