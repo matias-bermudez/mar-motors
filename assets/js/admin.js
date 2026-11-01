@@ -449,8 +449,10 @@ function agregarArchivos(files) {
   if (imgs.length) sucio = true;
   renderFotos();
 }
-const fileInput = $('[data-file]');
-fileInput.addEventListener('change', () => { agregarArchivos(fileInput.files); fileInput.value = ''; });
+// Dos entradas: la galería (varias a la vez) y la cámara del celular (una por vez). Se suben al guardar.
+for (const input of [$('[data-file]'), $('[data-camara]')]) {
+  input.addEventListener('change', () => { agregarArchivos(input.files); input.value = ''; });
+}
 const drop = $('[data-drop]');
 ['dragenter', 'dragover'].forEach((t) => drop.addEventListener(t, (e) => { e.preventDefault(); drop.classList.add('over'); }));
 ['dragleave', 'drop'].forEach((t) => drop.addEventListener(t, () => drop.classList.remove('over')));

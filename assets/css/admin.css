@@ -142,6 +142,16 @@ body.admin { background: var(--paper); color: var(--navy); min-height: 100vh; }
 .adm-drop:hover, .adm-drop.over { border-color: var(--navy); color: var(--navy); background: #FAF9F6; }
 .adm-drop input { position: absolute; width: 1px; height: 1px; opacity: 0; }
 .adm-drop:focus-within { outline: 3px solid var(--red-4); outline-offset: 3px; }
+.adm-foto-botones { display: grid; gap: 12px; }
+/* «Sacar foto» solo en pantallas táctiles (celular, tablet): en la compu no hay cámara que abrir. */
+.adm-drop--camara, .adm-solo-tactil { display: none; }
+@media (pointer: coarse) {
+  .adm-foto-botones { grid-template-columns: 1fr 1fr; }
+  .adm-drop--camara { display: flex; border-style: solid; border-color: var(--navy); color: var(--navy); }
+  .adm-drop .adm-solo-tactil { display: inline; }
+  .adm-drop .adm-solo-compu { display: none; }
+  .adm-foto-botones .adm-drop { gap: 10px; padding: 12px; min-height: 96px; }
+}
 .adm-savebar {
   position: sticky;
   bottom: 0;
