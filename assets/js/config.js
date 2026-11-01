@@ -40,7 +40,11 @@ export const CONFIG = {
   // Bloque "¿Ya cumpliste un año con tu préstamo en MiAuto?"
   mostrarRenovacion: true,
 
-  // Supabase → Project Settings → API. Si quedan vacíos, la web muestra autos de ejemplo.
-  supabaseUrl: '',
-  supabaseAnonKey: '',
+  // Base compartida de la Plataforma Automotoras (~/Proyectos/plataforma-automotoras): un solo Supabase
+  // para todas las automotoras. `concesionaria` = id de Mar Motors en la base (filtra autos, fotos y permisos).
+  // La clave es la publishable: va en el código, los permisos los pone la base (RLS).
+  // La web pública no consulta Supabase: el build lee los autos y baja las fotos. Solo el panel lo usa en vivo.
+  supabaseUrl: 'https://dfunhdfvtmsmjdzpnhas.supabase.co',
+  supabaseKey: 'sb_publishable_4Q-GxNAtPB894PRurMLwkQ_2NRVIjWg',
+  concesionaria: 'mar-motors',
 };

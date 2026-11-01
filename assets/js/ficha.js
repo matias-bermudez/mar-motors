@@ -7,7 +7,8 @@ import {
 fillContact();
 
 const root = $('[data-ficha-auto]');
-const id = document.body.dataset.autoId || new URLSearchParams(location.search).get('id');
+// scripts/build.mjs arma cada ficha en autos/<slug>/ y marca <body data-auto="<slug>">.
+const ref = document.body.dataset.auto;
 
 function noEncontrado(texto) {
   document.title = 'Auto no encontrado · Mar Motors';
@@ -31,6 +32,8 @@ function render(a) {
   $('meta[name="description"]').content = seo.description;
   $('.wa-float').href = waUrl(msgConsulta(a));
 
+  // La ficha ya viene armada en el HTML: se reemplaza entera (datos + descripción) para no duplicarla.
+  $('.desc', root)?.remove();
   $('.detail-grid', root).outerHTML = fichaHTML(a);
 
   if (fotos.length) galeria(fotos, nombre(a));
@@ -140,10 +143,10 @@ async function otros(a) {
   } catch (err) { console.error(err); }
 }
 
-if (!id) {
-  noEncontrado('El link no tiene el número del auto.');
+if (!ref) {
+  noEncontrado('El link no corresponde a ningún auto.');
 } else {
-  getAuto(id)
+  getAuto(ref)
     .then((a) => {
       if (!a) return noEncontrado('Puede que se haya vendido o que lo hayamos sacado de la web. Mirá los que tenemos hoy o escribinos y te ayudamos a encontrar uno.');
       render(a);

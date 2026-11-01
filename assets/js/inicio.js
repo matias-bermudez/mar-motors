@@ -2,7 +2,7 @@ import { CONFIG } from './config.js';
 import { listAutos, getAuto } from './db.js';
 import {
   $, $$, esc, CATEGORIAS, COMBUSTIBLES, CAJAS, categoria, ordenar, carCard, skeletonCards,
-  fillContact, abrirWhatsApp, nombre, fmtPrecio, fmtKm, urlAuto,
+  fillContact, abrirWhatsApp, nombre, fmtPrecio, fmtKm, urlAuto, fotoChica,
 } from './ui.js';
 
 fillContact();
@@ -14,8 +14,18 @@ const grid = $('[data-autos]');
 const filtrosEl = $('[data-filtros]');
 const verMas = $('[data-ver-mas]');
 let autos = [];
-let filtro = 'Todos';
 let todos = false;
+
+// El filtro queda en la URL (?tipo=camionetas#autos): se puede compartir y sobrevive al volver atrás.
+const EN_URL = { Autos: 'autos', 'Camionetas y SUV': 'camionetas', Utilitarios: 'utilitarios' };
+const params = () => new URLSearchParams(location.search);
+let filtro = Object.keys(EN_URL).find((c) => EN_URL[c] === params().get('tipo')) || 'Todos';
+function cambiarUrl(clave, valor) {
+  const u = new URL(location.href);
+  if (valor) u.searchParams.set(clave, valor);
+  else u.searchParams.delete(clave);
+  history.replaceState(null, '', u);
+}
 
 function render() {
   const lista = filtro === 'Todos' ? autos : autos.filter((a) => categoria(a) === filtro);
@@ -38,6 +48,7 @@ filtrosEl.addEventListener('click', (e) => {
   if (!b) return;
   filtro = b.dataset.cat;
   todos = false;
+  cambiarUrl('tipo', EN_URL[filtro]);
   render();
 });
 verMas.addEventListener('click', () => { todos = true; render(); });
@@ -59,7 +70,7 @@ $$('select[data-opts]', form).forEach((s) => {
   s.innerHTML = opts[s.dataset.opts].map((o) => `<option>${esc(o)}</option>`).join('');
 });
 
-let interes = null; // auto del patio que quiere llevarse (llega con ?auto=ID desde la ficha)
+let interes = null; // auto del patio que quiere llevarse (llega con ?auto=<slug> desde la ficha)
 
 const modo = () => form.elements.modo.value;
 function aplicarModo() {
@@ -76,23 +87,23 @@ $$('[data-modo]').forEach((a) => a.addEventListener('click', () => {
 }));
 
 async function cargarInteres() {
-  const id = new URLSearchParams(location.search).get('auto');
-  if (!id) return;
+  const ref = params().get('auto');
+  if (!ref) return;
   try {
-    interes = await getAuto(id);
+    interes = await getAuto(ref);
   } catch (err) { console.error(err); }
   if (!interes) return;
   $('[data-interes-nombre]', form).textContent = nombre(interes);
   $('[data-interes-meta]', form).textContent = `${interes.anio} · ${fmtKm(interes.km)} · ${fmtPrecio(interes)}`;
   const img = $('[data-interes-foto]', form);
-  if (interes.fotos?.[0]) { img.src = interes.fotos[0]; img.hidden = false; }
+  if (fotoChica(interes)) { img.src = fotoChica(interes); img.hidden = false; }
   form.elements.modo.value = 'permutar';
   aplicarModo();
 }
 $('[data-interes-quitar]', form).addEventListener('click', () => {
   interes = null;
   aplicarModo();
-  history.replaceState(null, '', location.pathname + location.hash);
+  cambiarUrl('auto');
 });
 
 const soloDigitos = (s) => String(s).replace(/\D/g, '');

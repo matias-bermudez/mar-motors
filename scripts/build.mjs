@@ -1,40 +1,109 @@
 // Arma la web publicada en _site/ (lo corre GitHub Actions, ver .github/workflows/deploy.yml).
 //
-// Además de copiar los archivos, genera lo que Google y WhatsApp necesitan ver sin ejecutar JavaScript:
-// - una página por auto (autos/12-chevrolet-onix-lt-1-4-2019/) con título, descripción, foto y datos estructurados
-// - los autos ya escritos en el inicio, canonical, robots y datos estructurados de la automotora
-// - sitemap.xml y robots.txt
+// Los autos salen de la base compartida de la Plataforma Automotoras (Supabase), solo los de Mar Motors
+// (`concesionaria` en config.js). La web pública NO consulta Supabase: acá se leen los autos, se bajan
+// las fotos al sitio (con caché en .cache/fotos/) y se escribe todo estático:
+// - una página por auto (autos/<slug>/) con título, descripción, foto y datos estructurados
+// - el inicio con los autos ya escritos, canonical, robots y datos estructurados de la automotora
+// - assets/js/autos.js: los mismos autos para el navegador (filtros, galería, permuta)
+// - sitemap.xml, robots.txt y estado.json (hash de los autos: el cron no republica si no cambió nada)
 //
-// Uso: node scripts/build.mjs   (sin dependencias, Node 20+)
+// Uso (sin dependencias, Node 20+):
+//   node scripts/build.mjs                   → para publicar
+//   node scripts/build.mjs --local           → para probar: python3 -m http.server 8803 -d _site
+//   SOLO_SI_CAMBIO=1 node scripts/build.mjs  → no hace nada si los autos no cambiaron desde la última publicación
 
-import { cp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { appendFileSync } from 'node:fs';
+import { copyFile, cp, mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { CONFIG } from '../assets/js/config.js';
-import { DEMO_AUTOS } from '../assets/js/demo.js';
+import { deFila, rutaChica } from '../assets/js/modelo.js';
 import {
-  LINKS, esc, nombre, ordenar, carCard, fichaHTML, seoAuto, rutaAuto, urlAuto, CARROCERIAS, fmtKm,
+  LINKS, esc, nombre, ordenar, carCard, fichaHTML, seoAuto, rutaAuto, urlAuto, nombreCarroceria, fmtKm, fmtPrecio,
 } from '../assets/js/ui.js';
 
 const ROOT = fileURLToPath(new URL('../', import.meta.url));
 const OUT = `${ROOT}_site/`;
+const CACHE_FOTOS = `${ROOT}.cache/fotos/`;
 const SITIO = new URL(CONFIG.sitioUrl);
 const abs = (ruta) => new URL(ruta, SITIO).href;
+// Carpeta de la web en el servidor (para <base> del 404 y de las fichas). --local: servida en la raíz.
+const BASE = process.argv.includes('--local') ? '/' : SITIO.pathname;
 
-// En la web publicada los links a autos son las páginas estáticas, con la dirección pública.
+// En el HTML armado los links a autos van con la dirección pública.
 LINKS.raiz = SITIO;
-LINKS.estatico = true;
 
 // ── Datos ────────────────────────────────────────────────────────
-async function traerAutos() {
-  if (!CONFIG.supabaseUrl || !CONFIG.supabaseAnonKey) {
-    console.log('Supabase sin configurar: se publican los autos de ejemplo.');
-    return DEMO_AUTOS;
-  }
-  const url = `${CONFIG.supabaseUrl}/rest/v1/autos?select=*&publicado=eq.true&order=created_at.desc`;
-  const res = await fetch(url, { headers: { apikey: CONFIG.supabaseAnonKey, Authorization: `Bearer ${CONFIG.supabaseAnonKey}` } });
+async function leerSupabase() {
+  const url = `${CONFIG.supabaseUrl}/rest/v1/autos?select=*&concesionaria=eq.${encodeURIComponent(CONFIG.concesionaria)}&order=created_at.desc`;
+  // Las claves sb_publishable_ van solo en apikey; las viejas (anon, JWT) también en Authorization.
+  const headers = { apikey: CONFIG.supabaseKey };
+  if (!CONFIG.supabaseKey.startsWith('sb_')) headers.Authorization = `Bearer ${CONFIG.supabaseKey}`;
+  const res = await fetch(url, { headers });
   // Si Supabase falla no publicamos una web vacía: el deploy anterior queda online.
   if (!res.ok) throw new Error(`Supabase respondió ${res.status}: ${await res.text()}`);
   return res.json();
+}
+
+// Fila → auto de la web. Si a un auto le falta algo, se saltea con un aviso (no rompe la publicación).
+// La base ya solo devuelve publicados y no vendidos a la clave pública; el filtro es por las dudas.
+function autoDe(r) {
+  if (!r.publicado || r.estado === 'vendido') return null;
+  const falta = ['slug', 'marca', 'modelo', 'anio'].filter((k) => r[k] === null || r[k] === undefined || r[k] === '');
+  if (falta.length || !/^[a-z0-9]+(-[a-z0-9]+)*$/.test(r.slug)) {
+    console.warn(`Aviso: se saltea el auto ${r.id} (${r.marca} ${r.modelo}), falta o está mal: ${falta.join(', ') || 'slug'}`);
+    return null;
+  }
+  return deFila(r);
+}
+
+// Las fotos no cambian nunca (nombre = uuid): se guardan en .cache/fotos/ y solo se bajan las nuevas.
+// GitHub Actions conserva esa carpeta entre publicaciones (actions/cache), así no se gasta cupo de Supabase.
+// Quedan en img/autos/<slug>/: la grande (1600 px) para la galería y la _m (640 px) para tarjetas.
+async function bajarFotos(autos) {
+  await mkdir(CACHE_FOTOS, { recursive: true }); // aunque no haya fotos, para que Actions pueda guardar la caché
+  const url = (p) => `${CONFIG.supabaseUrl}/storage/v1/object/public/fotos/${p.split('/').map(encodeURIComponent).join('/')}`;
+  const bajar = async (p, destino) => {
+    const cache = CACHE_FOTOS + p;
+    if (!(await existe(cache))) {
+      const res = await fetch(url(p));
+      if (!res.ok) return false;
+      await mkdir(cache.replace(/[^/]+$/, ''), { recursive: true });
+      await writeFile(cache, Buffer.from(await res.arrayBuffer()));
+    }
+    await mkdir(`${OUT}${destino}`.replace(/[^/]+$/, ''), { recursive: true });
+    await copyFile(cache, `${OUT}${destino}`);
+    return true;
+  };
+  const tareas = autos.flatMap((a) => a.fotos.map((p) => {
+    const f = { p, ok: false };
+    (a._fotos ||= []).push(f);
+    return async () => {
+      if (!/^[\w-]+\/[\w-]+\.jpg$/.test(p)) return console.warn(`Aviso: ruta de foto rara, se saltea: ${p} (${a.slug})`);
+      const archivo = `img/autos/${a.slug}/${p.split('/').pop()}`;
+      f.ok = await bajar(p, archivo);
+      if (!f.ok) return console.warn(`Aviso: no se pudo bajar la foto ${p} de ${a.slug}`);
+      f.grande = archivo;
+      f.chica = (await bajar(rutaChica(p), rutaChica(archivo))) ? rutaChica(archivo) : archivo;
+    };
+  }));
+  // De a 6 descargas a la vez.
+  const cola = tareas.slice();
+  await Promise.all(Array.from({ length: 6 }, async () => { while (cola.length) await cola.shift()(); }));
+  for (const a of autos) {
+    const ok = (a._fotos || []).filter((f) => f.ok);
+    a.fotos = ok.map((f) => f.grande);
+    a.miniaturas = ok.map((f) => f.chica);
+    delete a._fotos;
+  }
+}
+
+const existe = (f) => stat(f).then(() => true, () => false);
+
+// Para GitHub Actions: `cambio` decide si se publica.
+function salida(clave, valor) {
+  if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `${clave}=${valor}\n`);
 }
 
 // ── <head> ───────────────────────────────────────────────────────
@@ -57,10 +126,13 @@ function seo(html, { canonical, indexable, title, description, ogTitle, ogDescri
     CONFIG.googleVerificacion && `<meta name="google-site-verification" content="${esc(CONFIG.googleVerificacion)}">`,
     ...datos.map(jsonld),
   ].filter(Boolean).join('\n  ');
-  html = html
-    .replace('<html lang="es-UY">', '<html lang="es-UY" data-estatico>')
-    .replace(/<!-- SEO:[^>]*-->/, tags);
-  if (base) html = html.replace('<meta charset="utf-8">', `<meta charset="utf-8">\n  <base href="${esc(base)}">`);
+  html = html.replace(/<!-- SEO:[^>]*-->/, tags);
+  if (base) {
+    const tag = `<base href="${esc(base)}">`;
+    html = /<base href="[^"]*">/.test(html)
+      ? html.replace(/<base href="[^"]*">(<!--[^>]*-->)?/, tag)
+      : html.replace('<meta charset="utf-8">', `<meta charset="utf-8">\n  ${tag}`);
+  }
   if (title) html = html.replace(/<title>[^<]*<\/title>/, `<title>${esc(title)}</title>`);
   if (description) html = setMeta(html, 'name', 'description', description);
   if (ogTitle) html = setMeta(html, 'property', 'og:title', ogTitle);
@@ -111,7 +183,6 @@ const automotora = () => ({
 const DISPONIBILIDAD = {
   disponible: 'https://schema.org/InStock',
   reservado: 'https://schema.org/LimitedAvailability',
-  vendido: 'https://schema.org/SoldOut',
 };
 
 function datosAuto(a, url, descripcion) {
@@ -121,7 +192,7 @@ function datosAuto(a, url, descripcion) {
     name: `${nombre(a)} ${a.anio}`,
     url,
     description: a.descripcion || descripcion,
-    image: a.fotos?.length ? a.fotos : [abs('assets/img/og.jpg')],
+    image: a.fotos.length ? a.fotos.map(abs) : [abs('assets/img/og.jpg')],
     brand: { '@type': 'Brand', name: a.marca },
     model: a.modelo,
     vehicleModelDate: String(a.anio),
@@ -129,7 +200,7 @@ function datosAuto(a, url, descripcion) {
     mileageFromOdometer: { '@type': 'QuantitativeValue', value: a.km, unitCode: 'KMT' },
     fuelType: a.combustible,
     vehicleTransmission: a.caja,
-    bodyType: CARROCERIAS[a.carroceria]?.label,
+    bodyType: nombreCarroceria(a),
     ...(a.color && { color: a.color }),
     ...(a.puertas && { numberOfDoors: a.puertas }),
     ...(a.motor && { vehicleEngine: { '@type': 'EngineSpecification', name: a.motor } }),
@@ -142,7 +213,7 @@ function datosAuto(a, url, descripcion) {
       availability: DISPONIBILIDAD[a.estado] || DISPONIBILIDAD.disponible,
       itemCondition: 'https://schema.org/UsedCondition',
       url,
-      seller: { '@type': 'AutoDealer', name: 'Mar Motors', url: SITIO.href, telephone: tel(CONFIG.telefonoFijo) },
+      seller: { '@type': 'AutoDealer', '@id': abs('#automotora'), name: 'Mar Motors', url: SITIO.href, telephone: tel(CONFIG.telefonoFijo) },
     };
   }
   const migas = {
@@ -159,13 +230,32 @@ function datosAuto(a, url, descripcion) {
 
 // ── Páginas ──────────────────────────────────────────────────────
 const leer = (f) => readFile(`${ROOT}${f}`, 'utf8');
-const escribir = async (f, html) => {
+const escribir = async (f, contenido) => {
   await mkdir(`${OUT}${f}`.replace(/[^/]+$/, ''), { recursive: true });
-  await writeFile(`${OUT}${f}`, html);
+  await writeFile(`${OUT}${f}`, contenido);
 };
 
+// ?v=<hash> en css y js: GitHub Pages cachea 10 minutos y sin esto el navegador podría mezclar un HTML
+// nuevo con un JS viejo. Un solo hash para todo (cambia si cambia cualquier css/js o los autos).
+let VERSION = '';
+const versionar = (html) => html.replace(/((?:href|src)="[^"]*assets\/(?:css|js)\/[\w.-]+\.(?:css|js))"/g, `$1?v=${VERSION}"`);
+
+async function versionarAssets() {
+  const archivos = [];
+  for (const dir of ['assets/css/', 'assets/js/']) {
+    for (const f of (await readdir(`${OUT}${dir}`)).sort()) archivos.push(`${OUT}${dir}${f}`);
+  }
+  const h = createHash('sha1');
+  for (const f of archivos) h.update(await readFile(f));
+  VERSION = h.digest('hex').slice(0, 10);
+  // Los import entre módulos también llevan la versión (si no, cargarían la copia vieja).
+  for (const f of archivos.filter((x) => x.endsWith('.js'))) {
+    const js = await readFile(f, 'utf8');
+    await writeFile(f, js.replace(/((?:\bfrom\s*|\bimport\s*\(\s*)(['"])\.\/[\w.-]+\.js)\2/g, `$1?v=${VERSION}$2`));
+  }
+}
+
 function inicio(html, autos) {
-  const lista = ordenar(autos);
   html = seo(html, {
     canonical: SITIO.href,
     indexable: true,
@@ -176,7 +266,7 @@ function inicio(html, autos) {
   });
   const vacio = '<div class="cars" data-autos aria-live="polite"></div>';
   if (!html.includes(vacio)) throw new Error('No encontré la grilla de autos en index.html');
-  return html.replace(vacio, `<div class="cars" data-autos aria-live="polite">${lista.slice(0, 9).map(carCard).join('')}</div>`);
+  return html.replace(vacio, () => `<div class="cars" data-autos aria-live="polite">${autos.slice(0, 9).map(carCard).join('')}</div>`);
 }
 
 function paginaAuto(plantilla, a) {
@@ -184,18 +274,17 @@ function paginaAuto(plantilla, a) {
   const { title, description } = seoAuto(a);
   let html = seo(plantilla, {
     canonical: url,
-    // Los vendidos siguen abriendo (por si alguien tiene el link) pero no van a Google.
-    indexable: a.estado !== 'vendido',
-    base: SITIO.pathname,
+    indexable: true,
+    base: BASE,
     title,
     description,
-    ogTitle: `${nombre(a)} ${a.anio} · ${a.precio ? `${a.moneda === 'UYU' ? '$' : 'U$S'} ${Number(a.precio).toLocaleString('es-UY')}` : 'Consultar precio'}`,
+    ogTitle: `${nombre(a)} ${a.anio} · ${a.precio ? fmtPrecio(a) : 'Consultar precio'}`,
     ogDescription: `${fmtKm(a.km)} · ${[a.combustible, a.caja].filter(Boolean).join(' · ')}. Mar Motors, Montevideo.`,
-    ogImage: a.fotos?.[0],
+    ogImage: a.fotos[0] && abs(a.fotos[0]),
     ogType: 'product',
     datos: datosAuto(a, url, description),
   });
-  html = html.replace('<body>', `<body data-auto-id="${esc(a.id)}">`);
+  html = html.replace('<body>', `<body data-auto="${esc(a.slug)}">`);
   const vacio = /<div class="detail-grid" aria-busy="true">[\s\S]*?<div class="info"><\/div>\s*<\/div>/;
   if (!vacio.test(html)) throw new Error('No encontré la ficha vacía en auto.html');
   return html.replace(vacio, () => fichaHTML(a));
@@ -206,7 +295,7 @@ function sitemap(autos) {
   const fecha = (a) => (a.updated_at || a.created_at || hoy).slice(0, 10);
   const urls = [
     { loc: SITIO.href, lastmod: autos.map(fecha).sort().at(-1) || hoy },
-    ...autos.filter((a) => a.estado !== 'vendido').map((a) => ({ loc: urlAuto(a), lastmod: fecha(a) })),
+    ...autos.map((a) => ({ loc: urlAuto(a), lastmod: fecha(a) })),
   ];
   return `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
@@ -216,7 +305,21 @@ ${urls.map((u) => `  <url><loc>${esc(u.loc)}</loc><lastmod>${u.lastmod}</lastmod
 }
 
 // ── Armado ───────────────────────────────────────────────────────
-const autos = await traerAutos();
+const filas = await leerSupabase();
+const hash = createHash('sha256').update(JSON.stringify(filas)).digest('hex').slice(0, 16);
+
+if (process.env.SOLO_SI_CAMBIO) {
+  const anterior = await fetch(`${abs('estado.json')}?t=${Date.now()}`, { cache: 'no-store' })
+    .then((r) => (r.ok ? r.json() : null)).catch(() => null);
+  if (anterior?.hash === hash) {
+    console.log('Los autos no cambiaron desde la última publicación: no hay nada para publicar.');
+    salida('cambio', 'false');
+    process.exit(0);
+  }
+}
+
+// Disponibles primero, después reservados (cada grupo, el más nuevo primero).
+const autos = ordenar(filas.map(autoDe).filter(Boolean));
 
 await rm(OUT, { recursive: true, force: true });
 await mkdir(OUT, { recursive: true });
@@ -224,17 +327,24 @@ for (const f of ['assets', 'admin', '.nojekyll']) await cp(`${ROOT}${f}`, `${OUT
 // Con dominio propio en sitioUrl, GitHub Pages necesita el archivo CNAME.
 if (!SITIO.hostname.endsWith('.github.io')) await writeFile(`${OUT}CNAME`, `${SITIO.hostname}\n`);
 
-await escribir('index.html', inicio(await leer('index.html'), autos));
+await bajarFotos(autos);
+// El navegador (filtros, galería, permuta) usa estos mismos datos: no consulta Supabase.
+await escribir('assets/js/autos.js', `// Generado por scripts/build.mjs desde la base compartida (${CONFIG.concesionaria}). No editar.\nexport const AUTOS = ${JSON.stringify(autos.map(({ extra, ...a }) => a), null, 1)};\n`);
+await versionarAssets();
+
+await escribir('index.html', versionar(inicio(await leer('index.html'), autos)));
 
 const plantilla = await leer('auto.html');
-for (const a of autos) await escribir(`${rutaAuto(a)}index.html`, paginaAuto(plantilla, a));
-// auto.html?id=… queda como respaldo (autos recién cargados, vista previa de ocultos) y no va a Google.
-await escribir('auto.html', seo(plantilla, { indexable: false }));
+for (const a of autos) await escribir(`${rutaAuto(a)}index.html`, versionar(paginaAuto(plantilla, a)));
 
-await escribir('404.html', seo(await leer('404.html'), { indexable: false, base: SITIO.pathname }));
-await escribir('admin/index.html', (await leer('admin/index.html')).replace('<html lang="es-UY">', '<html lang="es-UY" data-estatico>'));
+// 404: GitHub Pages lo sirve en cualquier URL que no existe (ej. un auto vendido). Estático, sin JavaScript.
+await escribir('404.html', versionar(seo(await leer('404.html'), { indexable: false, base: BASE })));
+await escribir('admin/index.html', versionar(await leer('admin/index.html')));
 
 await escribir('sitemap.xml', sitemap(autos));
-await escribir('robots.txt', `User-agent: *\nAllow: /\n${CONFIG.indexar ? `\nSitemap: ${abs('sitemap.xml')}\n` : ''}`);
+await escribir('robots.txt', `User-agent: *\nAllow: /\nDisallow: ${SITIO.pathname}admin/\n${CONFIG.indexar ? `\nSitemap: ${abs('sitemap.xml')}\n` : ''}`);
+await escribir('estado.json', `${JSON.stringify({ hash, generado: new Date().toISOString(), autos: autos.length })}\n`);
+salida('cambio', 'true');
 
-console.log(`Listo: ${autos.length} autos → ${OUT} (${CONFIG.indexar ? 'indexable' : 'modo prueba: noindex'})`);
+const conFotos = autos.filter((a) => a.fotos.length).length;
+console.log(`Listo: ${autos.length} autos (${conFotos} con fotos) de «${CONFIG.concesionaria}» → ${OUT} (${CONFIG.indexar ? 'indexable' : 'modo prueba: noindex'}${BASE === '/' ? ', --local' : ''})`);

@@ -14,12 +14,16 @@ export const CARROCERIAS = {
   utilitario: { label: 'Utilitario', cat: 'Utilitarios' },
 };
 export const CATEGORIAS = ['Todos', 'Autos', 'Camionetas y SUV', 'Utilitarios'];
+// Si un auto de la base trae una carrocería que esta web no conoce, se ubica por su `tipo`.
+const POR_TIPO = { auto: { label: 'Auto', cat: 'Autos' }, camioneta: { label: 'Camioneta', cat: 'Camionetas y SUV' }, utilitario: { label: 'Utilitario', cat: 'Utilitarios' } };
+const clase = (a) => CARROCERIAS[a.carroceria] || POR_TIPO[a.tipo];
+export const nombreCarroceria = (a) => clase(a)?.label;
 export const COMBUSTIBLES = ['Nafta', 'Diésel', 'Híbrido', 'Eléctrico', 'GNC'];
 export const CAJAS = ['Manual', 'Automática'];
 
 const num = (n) => Number(n).toLocaleString('es-UY');
 export const nombre = (a) => `${a.marca} ${a.modelo}`;
-export const categoria = (a) => CARROCERIAS[a.carroceria]?.cat || 'Autos';
+export const categoria = (a) => clase(a)?.cat || 'Autos';
 export const fmtKm = (km) => `${num(km || 0)} km`;
 export const fmtPrecio = (a) => (a.precio ? `${a.moneda === 'UYU' ? '$' : 'U$S'} ${num(a.precio)}` : 'Consultar');
 export const detalle = (a) => [a.combustible, a.caja, a.color].filter(Boolean).join(' · ');
@@ -27,7 +31,7 @@ export const detalle = (a) => [a.combustible, a.caja, a.color].filter(Boolean).j
 export function etiqueta(a) {
   if (a.estado === 'vendido') return { text: 'Vendido', cls: 'vendido' };
   if (a.estado === 'reservado') return { text: 'Reservado', cls: 'reservado' };
-  return { text: CARROCERIAS[a.carroceria]?.label || 'Auto', cls: '' };
+  return { text: clase(a)?.label || 'Auto', cls: '' };
 }
 
 // Disponibles primero, después reservados y al final vendidos (cada grupo, el más nuevo primero).
@@ -35,18 +39,14 @@ const PESO = { disponible: 0, reservado: 1, vendido: 2 };
 export const ordenar = (autos) => [...autos].sort((x, y) => (PESO[x.estado] ?? 0) - (PESO[y.estado] ?? 0));
 
 // ── Links ────────────────────────────────────────────────────────
-// En la web publicada (armada por scripts/build.mjs, que marca <html data-estatico>) cada auto tiene su
-// página propia: autos/12-chevrolet-onix-lt-1-4-2019/. Sin armar (probando en la compu) se usa auto.html?id=12.
-export const LINKS = {
-  raiz: new URL('../../', import.meta.url),
-  estatico: typeof document !== 'undefined' && document.documentElement.hasAttribute('data-estatico'),
-};
-export const slug = (a) => `${a.marca} ${a.modelo} ${a.anio}`
-  .normalize('NFD').replace(/[̀-ͯ]/g, '')
-  .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-export const rutaAuto = (a) => `autos/${a.id}-${slug(a)}/`;
-export const urlAuto = (a) => new URL(LINKS.estatico ? rutaAuto(a) : `auto.html?id=${encodeURIComponent(a.id)}`, LINKS.raiz).href;
-export const urlPermuta = (a) => new URL(`./?auto=${encodeURIComponent(a.id)}#permuta`, LINKS.raiz).href;
+// Cada auto tiene su página, que arma scripts/build.mjs: autos/<slug>/ (slug = marca-modelo-año, ver modelo.js).
+// raiz: en el navegador, la carpeta de la web (sale de dónde está este archivo); el build usa la URL pública.
+export const LINKS = { raiz: new URL('../../', import.meta.url) };
+export const rutaAuto = (a) => `autos/${a.slug}/`;
+export const urlAuto = (a) => new URL(rutaAuto(a), LINKS.raiz).href;
+export const urlPermuta = (a) => new URL(`./?auto=${encodeURIComponent(a.slug)}#permuta`, LINKS.raiz).href;
+// Foto chica (640 px) para tarjetas y miniaturas; si no hay, la grande.
+export const fotoChica = (a, i = 0) => a.miniaturas?.[i] || a.fotos?.[i];
 // api.whatsapp.com y no wa.me: la redirección de wa.me rompe los emojis (🚗 → �).
 export const waUrl = (text) => `https://api.whatsapp.com/send?phone=${CONFIG.whatsapp.intl}${text ? `&text=${encodeURIComponent(text)}` : ''}`;
 export const telUrl = (t) => `tel:+${t.intl}`;
@@ -110,7 +110,7 @@ export function fichaHTML(a) {
     ['Combustible', a.combustible],
     ['Caja', a.caja],
     ['Motor', a.motor],
-    ['Carrocería', CARROCERIAS[a.carroceria]?.label],
+    ['Carrocería', nombreCarroceria(a)],
     ['Color', a.color],
     ['Puertas', a.puertas],
   ].filter(([, v]) => v !== null && v !== undefined && v !== '');
@@ -126,7 +126,7 @@ export function fichaHTML(a) {
             <span class="gallery-count" data-count></span>` : ''}
         </div>
         ${fotos.length > 1 ? `<div class="thumbs" role="group" aria-label="Fotos">${fotos.map((f, i) => `
-          <button type="button" data-thumb="${i}" aria-label="Ver foto ${i + 1}"><img src="${esc(f)}" alt="" loading="lazy"></button>`).join('')}</div>` : ''}
+          <button type="button" data-thumb="${i}" aria-label="Ver foto ${i + 1}"><img src="${esc(fotoChica(a, i))}" alt="" loading="lazy"></button>`).join('')}</div>` : ''}
       </div>
 
       <div class="info">
@@ -168,7 +168,7 @@ export const NO_PHOTO = '<span class="no-photo">Foto próximamente</span>';
 export function carCard(a) {
   const tag = etiqueta(a);
   const href = esc(urlAuto(a));
-  const foto = a.fotos?.[0];
+  const foto = fotoChica(a);
   const vendido = a.estado === 'vendido';
   return `
     <article class="car${vendido ? ' is-vendido' : ''}">

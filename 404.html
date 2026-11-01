@@ -2,7 +2,7 @@
 <html lang="es-UY">
 <head>
   <meta charset="utf-8">
-  <base href="/">
+  <base href="/"><!-- scripts/build.mjs pone la carpeta de la web: el 404 se sirve en cualquier URL -->
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Página no encontrada · Mar Motors</title>
   <meta name="description" content="Esta página no existe. Mirá los autos usados en venta en Mar Motors, Montevideo.">
@@ -27,11 +27,6 @@
   <link rel="stylesheet" href="assets/css/styles.css">
   </head>
 <body>
-  <script>
-    // Link a un auto recién cargado (su página todavía no se generó) o con el nombre cambiado: lo abrimos igual.
-    var m = location.pathname.match(/\/autos\/(\d+)(-|\/|$)/);
-    if (m) location.replace(document.baseURI + 'auto.html?id=' + m[1]);
-  </script>
   <header class="site-header">
     <div class="wrap">
       <a class="logo" href="./" aria-label="Mar Motors, ir al inicio">
