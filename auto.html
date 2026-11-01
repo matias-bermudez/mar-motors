@@ -3,17 +3,26 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Auto en venta · Mar Motors</title>
-  <meta name="description" content="Ficha del auto en Mar Motors: fotos, datos y consulta directa por WhatsApp.">
+  <title>Auto usado en venta · Mar Motors</title>
+  <meta name="description" content="Ficha del auto en Mar Motors, automotora en Montevideo: fotos, datos, precio y consulta por WhatsApp.">
   <meta name="theme-color" content="#1D2244">
+  <meta name="format-detection" content="telephone=no">
+  <!-- SEO: scripts/build.mjs agrega acá canonical, robots, og:url y datos estructurados -->
   <meta property="og:type" content="product">
-  <meta property="og:title" content="Mar Motors · Automotora">
-  <meta property="og:description" content="Tu próximo auto está acá. Venta, permuta y financiación en Montevideo.">
+  <meta property="og:site_name" content="Mar Motors">
   <meta property="og:locale" content="es_UY">
+  <meta property="og:title" content="Auto usado en venta · Mar Motors">
+  <meta property="og:description" content="Fotos, datos y precio. Consultalo por WhatsApp en Mar Motors, Montevideo.">
+  <meta property="og:image" content="assets/img/og.jpg">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="Mar Motors, automotora en Montevideo">
+  <meta name="twitter:card" content="summary_large_image">
   <link rel="icon" href="assets/img/favicon.svg" type="image/svg+xml">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@0,700;0,800;1,700;1,800;1,900&family=Barlow:wght@400;500;600;700&family=Kaushan+Script&family=Permanent+Marker&display=swap">
+  <link rel="icon" href="assets/img/icon-192.png" type="image/png" sizes="192x192">
+  <link rel="apple-touch-icon" href="assets/img/apple-touch-icon.png">
+  <link rel="preload" href="assets/fonts/barlow-condensed-900-italic.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="assets/fonts/barlow-condensed-700.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="assets/css/styles.css">
   <script type="module" src="assets/js/ficha.js"></script>
 </head>
@@ -37,15 +46,15 @@
   <!-- Encabezado -->
   <header class="site-header">
     <div class="wrap">
-      <a class="logo" href="index.html" aria-label="Mar Motors, ir al inicio">
+      <a class="logo" href="./" aria-label="Mar Motors, ir al inicio">
         <span class="logo-name">Mar <span>Motors</span></span>
         <span class="logo-tag">Automotora</span>
       </a>
       <nav class="nav" aria-label="Principal">
-        <a href="index.html#autos">Autos</a>
-        <a href="index.html#financiacion">Financiación</a>
-        <a href="index.html#permuta">Vendé o permutá</a>
-        <a href="index.html#visitanos">Visitanos</a>
+        <a href="./#autos">Autos</a>
+        <a href="./#financiacion">Financiación</a>
+        <a href="./#permuta">Vendé o permutá</a>
+        <a href="./#visitanos">Visitanos</a>
       </nav>
       <a class="btn btn-red header-cta" data-wa="general" href="#">
         <svg class="ico" aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20l1.4-4A8 8 0 1 1 8.3 19z"/><path d="M9.5 9.5c.3 2 1.8 3.7 4 4.3l1-1.2 1.8.8"/></svg>
@@ -56,7 +65,7 @@
 
   <main class="detail">
     <div class="wrap" data-ficha-auto>
-      <a class="back" href="index.html#autos">
+      <a class="back" href="./#autos">
         <svg class="ico" aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="M11 6l-6 6 6 6"/></svg>
         Volver al patio
       </a>
@@ -70,7 +79,7 @@
       <div class="wrap">
         <div class="section-head">
           <h2 class="h-section" style="font-size: clamp(40px, 5vw, 64px)">También en <span class="red">el patio</span></h2>
-          <a class="ig-link" href="index.html#autos">Ver todos los autos</a>
+          <a class="ig-link" href="./#autos">Ver todos los autos</a>
         </div>
         <div class="cars" data-otros-grid></div>
       </div>
@@ -81,15 +90,15 @@
   <footer class="site-footer">
     <div class="wrap">
       <div class="footer-top">
-        <a class="logo" href="index.html" aria-label="Mar Motors, ir al inicio">
+        <a class="logo" href="./" aria-label="Mar Motors, ir al inicio">
           <span class="logo-name">Mar <span>Motors</span></span>
           <span class="logo-tag">Automotora</span>
         </a>
         <nav class="nav" aria-label="Pie de página">
-          <a href="index.html#autos">Autos</a>
-          <a href="index.html#financiacion">Financiación</a>
-          <a href="index.html#permuta">Vendé o permutá</a>
-          <a href="index.html#visitanos">Visitanos</a>
+          <a href="./#autos">Autos</a>
+          <a href="./#financiacion">Financiación</a>
+          <a href="./#permuta">Vendé o permutá</a>
+          <a href="./#visitanos">Visitanos</a>
         </nav>
       </div>
       <div class="footer-bottom">
