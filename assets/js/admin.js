@@ -1,8 +1,11 @@
+// Panel del dueño (/admin/): login, lista, alta/edición/baja y fotos de los autos de Mar Motors
+// en la base compartida (ver supabase.js). Los permisos los pone la base: solo los emails de la tabla
+// admins con 'mar-motors' (o '*') pueden escribir. Cada cambio publica la web solo (unos 2 minutos).
 import {
-  configured, session, login, logout, esAdmin, listTodos, guardarAuto, borrarAuto, subirFoto, borrarFotos,
-} from './db.js';
+  configured, session, login, logout, puedeEditar, listTodos, guardarAuto, borrarAuto, subirFoto, borrarFotos, urlFoto,
+} from './supabase.js';
 import {
-  $, $$, esc, CARROCERIAS, COMBUSTIBLES, CAJAS, nombre, fmtKm, fmtPrecio, urlAuto, toast,
+  $, $$, esc, CARROCERIAS, COMBUSTIBLES, CAJAS, LINKS, nombre, fmtKm, fmtPrecio, urlAuto, toast,
 } from './ui.js';
 
 const vistas = $$('[data-vista]');
@@ -10,7 +13,7 @@ const mostrar = (v) => vistas.forEach((el) => { el.hidden = el.dataset.vista !==
 
 let autos = [];
 let editando = null;   // auto que se está editando (null = nuevo)
-let fotos = [];        // [{ url }] ya subidas o [{ file, preview }] nuevas
+let fotos = [];        // [{ ruta }] ya subidas (ruta en el bucket) o [{ file, preview }] nuevas
 let sucio = false;     // cambios sin guardar en el editor
 
 // ── Arranque y login ─────────────────────────────────────────────
@@ -22,9 +25,15 @@ async function iniciar() {
   mostrar('login');
 }
 
+// Solo entra quien puede editar Mar Motors; si no, se cierra la sesión y se avisa.
 async function entrar() {
+  if (!(await puedeEditar())) {
+    await logout();
+    mostrar('login');
+    $('[data-login-error]').textContent = 'Este usuario no tiene permiso para editar Mar Motors. Hay que agregarlo en la tabla admins de la base (ver README).';
+    return;
+  }
   $('[data-salir]').hidden = false;
-  $('[data-no-admin]').hidden = await esAdmin();
   mostrar('lista');
   await cargar();
 }
@@ -63,7 +72,7 @@ const filtroEstado = $('[data-filtro-estado]');
 async function cargar() {
   lista.innerHTML = '<p class="adm-empty">Cargando…</p>';
   try {
-    autos = await listTodos();
+    [autos] = await Promise.all([listTodos(), leerPublicacion()]);
     renderLista();
   } catch (err) {
     console.error(err);
@@ -71,7 +80,30 @@ async function cargar() {
   }
 }
 
+// Cuándo se armó la web publicada (estado.json lo escribe scripts/build.mjs). Un auto guardado después
+// todavía no se ve en la web: se marca y se vuelve a mirar cada 20 segundos hasta que aparezca.
+let publicadoEn = null;
+let revision;
+async function leerPublicacion() {
+  try {
+    const r = await fetch(new URL(`estado.json?t=${Date.now()}`, LINKS.raiz), { cache: 'no-store' });
+    publicadoEn = r.ok ? new Date((await r.json()).generado) : null;
+  } catch {
+    publicadoEn = null;
+  }
+}
+const pendiente = (a) => publicadoEn && new Date(a.updated_at) > publicadoEn;
+function revisarPublicacion() {
+  clearTimeout(revision);
+  if (!autos.some(pendiente)) return;
+  revision = setTimeout(async () => { await leerPublicacion(); renderLista(); }, 20000);
+}
+
+// En la web pública están los publicados que no se vendieron (los demás caen en la página 404).
+const enLaWeb = (a) => a.publicado && a.estado !== 'vendido';
+
 function renderLista() {
+  revisarPublicacion();
   const q = buscar.value.trim().toLowerCase().replace(/^#/, '');
   const fe = filtroEstado.value;
   const visibles = autos.filter((a) => {
@@ -89,11 +121,11 @@ function renderLista() {
   }
   lista.innerHTML = visibles.map((a) => `
     <article class="adm-row${a.publicado ? '' : ' oculto'}" data-id="${a.id}">
-      <div class="adm-thumb">${a.fotos?.[0] ? `<img src="${esc(a.fotos[0])}" alt="" loading="lazy">` : 'Sin fotos'}</div>
+      <div class="adm-thumb">${a.fotos[0] ? `<img src="${esc(urlFoto(a.fotos[0], true))}" alt="" loading="lazy">` : 'Sin fotos'}</div>
       <div class="adm-row-info">
         <b>${esc(nombre(a))}</b>
         <span>${esc(a.anio)} · ${esc(fmtKm(a.km))} · <span class="price">${esc(fmtPrecio(a))}</span></span>
-        <span>Ref. #${a.id} · ${a.fotos?.length || 0} foto${a.fotos?.length === 1 ? '' : 's'}${a.publicado ? '' : ' · <b style="font-size: inherit">Oculto</b>'}</span>
+        <span>Ref. #${a.id} · ${a.fotos.length} foto${a.fotos.length === 1 ? '' : 's'}${a.publicado ? '' : ' · <b style="font-size: inherit">Oculto</b>'}${pendiente(a) ? ' · <b style="font-size: inherit">Actualizando la web…</b>' : ''}</span>
       </div>
       <div class="adm-row-ctrl">
         <select data-accion="estado" data-estado="${esc(a.estado)}" aria-label="Estado de ${esc(nombre(a))}">
@@ -101,8 +133,8 @@ function renderLista() {
         </select>
         <label><input type="checkbox" data-accion="publicado"${a.publicado ? ' checked' : ''}>Publicado</label>
         <button class="adm-mini primary" type="button" data-accion="editar">Editar</button>
-        <a class="adm-mini" href="${esc(urlAuto(a))}" target="_blank" rel="noopener">Ver</a>
-        <button class="adm-mini" type="button" data-accion="copiar" title="Copiar el link para compartir">Link</button>
+        ${enLaWeb(a) ? `<a class="adm-mini" href="${esc(urlAuto(a))}" target="_blank" rel="noopener">Ver</a>
+        <button class="adm-mini" type="button" data-accion="copiar" title="Copiar el link para compartir">Link</button>` : ''}
         <button class="adm-mini danger" type="button" data-accion="borrar">Borrar</button>
       </div>
     </article>`).join('');
@@ -116,8 +148,8 @@ const autoDe = (el) => autos.find((a) => String(a.id) === el.closest('[data-id]'
 async function cambiar(a, cambios, el) {
   el.disabled = true;
   try {
-    Object.assign(a, await guardarAuto(a.id, cambios));
-    toast('Guardado');
+    Object.assign(a, await guardarAuto(a, cambios));
+    toast('Guardado. En un par de minutos se ve en la web.');
   } catch (err) {
     console.error(err);
     alert(`No se pudo guardar: ${err.message}`);
@@ -172,6 +204,18 @@ $$('select[data-opts]', form).forEach((s) => {
 });
 
 const CAMPOS = ['marca', 'modelo', 'anio', 'km', 'carroceria', 'combustible', 'caja', 'motor', 'color', 'puertas', 'precio', 'moneda', 'estado', 'descripcion'];
+// Km y precio se escriben como en Uruguay ("64.000", "U$S 14.500"): se toman solo los dígitos.
+const MONTOS = ['km', 'precio'];
+const digitos = (v) => String(v ?? '').replace(/\D/g, '');
+const miles = (n) => Number(n).toLocaleString('es-UY');
+
+// Si el auto trae un valor que no está en la lista (cargado desde otro lado), se agrega para no perderlo.
+function ponerValor(el, v) {
+  if (el.tagName === 'SELECT' && v !== '' && ![...el.options].some((o) => o.value === String(v))) {
+    el.add(new Option(String(v), String(v)));
+  }
+  el.value = v;
+}
 
 function abrirEditor(a) {
   editando = a;
@@ -181,14 +225,17 @@ function abrirEditor(a) {
   $('[data-progreso]').textContent = '';
   $('[data-editor-titulo]').textContent = a ? `Editar ${nombre(a)} · Ref. #${a.id}` : 'Cargar auto';
   if (a) {
-    CAMPOS.forEach((c) => { form.elements[c].value = a[c] ?? ''; });
+    CAMPOS.forEach((c) => {
+      const v = a[c] ?? '';
+      ponerValor(form.elements[c], MONTOS.includes(c) && v ? miles(v) : v);
+    });
     form.elements.publicado.checked = a.publicado;
   } else {
     form.elements.anio.value = '';
     form.elements.publicado.checked = true;
   }
   fotos.forEach((f) => f.preview && URL.revokeObjectURL(f.preview));
-  fotos = (a?.fotos || []).map((url) => ({ url }));
+  fotos = (a?.fotos || []).map((ruta) => ({ ruta }));
   renderFotos();
   sucio = false;
   mostrar('editor');
@@ -215,7 +262,7 @@ const fotosEl = $('[data-fotos]');
 function renderFotos() {
   fotosEl.innerHTML = fotos.map((f, i) => `
     <div class="adm-photo">
-      <img src="${esc(f.url || f.preview)}" alt="Foto ${i + 1}">
+      <img src="${esc(f.ruta ? urlFoto(f.ruta, true) : f.preview)}" alt="Foto ${i + 1}">
       ${i === 0 ? '<span class="cover">Portada</span>' : ''}
       ${f.file ? '<span class="new">Nueva</span>' : ''}
       <div class="tools">
@@ -262,19 +309,20 @@ drop.addEventListener('drop', (e) => { e.preventDefault(); agregarArchivos(e.dat
 function leerForm() {
   const f = form.elements;
   const entero = (v) => (v === '' ? null : Math.round(Number(v)));
+  const monto = (v) => (digitos(v) ? Number(digitos(v)) : null);
   const texto = (v) => v.trim() || null;
   return {
     marca: f.marca.value.trim(),
     modelo: f.modelo.value.trim(),
     anio: entero(f.anio.value),
-    km: entero(f.km.value) ?? 0,
+    km: monto(f.km.value) ?? 0,
     carroceria: f.carroceria.value,
     combustible: f.combustible.value,
     caja: f.caja.value,
     motor: texto(f.motor.value),
     color: texto(f.color.value),
     puertas: entero(f.puertas.value),
-    precio: entero(f.precio.value),
+    precio: monto(f.precio.value) || null, // vacío o 0 = «Consultar»
     moneda: f.moneda.value,
     estado: f.estado.value,
     publicado: f.publicado.checked,
@@ -288,14 +336,14 @@ function validar(row) {
   const malos = [
     [f.marca, !row.marca],
     [f.modelo, !row.modelo],
-    [f.anio, !(row.anio >= 1900 && row.anio <= max)],
-    [f.km, row.km < 0],
-    [f.precio, row.precio !== null && row.precio < 0],
+    [f.anio, !(row.anio >= 1950 && row.anio <= max)],
+    [f.km, !Number.isSafeInteger(row.km) || row.km > 2e6],
+    [f.precio, row.precio !== null && !(row.precio <= 2e9)],
   ];
   malos.forEach(([el, mal]) => el.setAttribute('aria-invalid', String(mal)));
   const primero = malos.find(([, mal]) => mal)?.[0];
   if (primero) {
-    $('[data-editor-error]').textContent = `Revisá los campos marcados en rojo (el año va de 1900 a ${max}).`;
+    $('[data-editor-error]').textContent = `Revisá los campos marcados en rojo (el año va de 1950 a ${max}).`;
     primero.focus();
   }
   return !primero;
@@ -314,30 +362,32 @@ form.addEventListener('submit', async (e) => {
   const nuevas = fotos.filter((f) => f.file);
   const subidas = [];
   try {
+    // Cada foto se achica en el navegador (1600 px + una de 640 px para las tarjetas) y se sube.
     for (const [n, f] of nuevas.entries()) {
       progreso.textContent = `Subiendo foto ${n + 1} de ${nuevas.length}…`;
-      f.url = await subirFoto(f.file);
-      subidas.push(f.url);
+      f.ruta = await subirFoto(f.file);
+      subidas.push(f.ruta);
     }
     progreso.textContent = 'Guardando…';
-    row.fotos = fotos.map((f) => f.url);
-    const guardado = await guardarAuto(editando?.id, row);
-    const quitadas = (editando?.fotos || []).filter((u) => !row.fotos.includes(u));
+    row.fotos = fotos.map((f) => f.ruta);
+    const guardado = await guardarAuto(editando, row);
+    // Las fotos que se quitaron se borran del bucket (las dos medidas).
+    const quitadas = (editando?.fotos || []).filter((r) => !row.fotos.includes(r));
     await borrarFotos(quitadas);
 
     if (editando) Object.assign(editando, guardado);
     else autos.unshift(guardado);
     sucio = false;
-    toast(editando ? 'Cambios guardados' : 'Auto publicado');
+    toast(editando ? 'Cambios guardados. En un par de minutos se ven en la web.' : 'Auto guardado. En un par de minutos se ve en la web.');
     await cerrarEditor();
     renderLista();
   } catch (ex) {
     console.error(ex);
     // Si falló al guardar, no dejamos fotos huérfanas en el bucket.
     await borrarFotos(subidas).catch(() => {});
-    nuevas.forEach((f) => { delete f.url; });
+    nuevas.forEach((f) => { delete f.ruta; });
     err.textContent = /row-level security/i.test(ex.message)
-      ? 'No tenés permiso para guardar: tu email no está en la tabla admins (ver README).'
+      ? 'No tenés permiso para guardar: tu email no está en la tabla admins de la base (ver README).'
       : `No se pudo guardar: ${ex.message}`;
   } finally {
     btn.disabled = false;

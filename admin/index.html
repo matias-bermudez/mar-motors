@@ -29,8 +29,8 @@
     <!-- Supabase sin configurar -->
     <section class="adm-card adm-narrow" data-vista="setup" hidden>
       <h1 class="adm-h1">Falta conectar la base de datos</h1>
-      <p>El panel necesita Supabase para guardar los autos y las fotos. Mientras tanto la web muestra autos de ejemplo.</p>
-      <p>Seguí los pasos de <b>«Conectar Supabase»</b> en el <code>README.md</code> del proyecto y completá <code>supabaseUrl</code> y <code>supabaseAnonKey</code> en <code>assets/js/config.js</code>.</p>
+      <p>El panel guarda los autos y las fotos en la base compartida de la Plataforma Automotoras (Supabase).</p>
+      <p>Completá <code>supabaseUrl</code>, <code>supabaseKey</code> y <code>concesionaria</code> en <code>assets/js/config.js</code> (ver <code>README.md</code>).</p>
     </section>
 
     <!-- Login -->
@@ -52,10 +52,6 @@
 
     <!-- Listado -->
     <section data-vista="lista" hidden>
-      <p class="adm-warn" data-no-admin hidden>
-        Tu usuario entró, pero no está en la lista de admins: no vas a poder guardar cambios.
-        Agregá tu email a la tabla <code>admins</code> (ver README, paso 3).
-      </p>
       <div class="adm-toolbar">
         <h1 class="adm-h1">Autos <span class="adm-count" data-total></span></h1>
         <input class="adm-search" type="search" placeholder="Buscar marca, modelo o ref." aria-label="Buscar autos" data-buscar>
@@ -95,8 +91,8 @@
           <legend>Datos del auto</legend>
           <label class="adm-field"><span>Marca *</span><input name="marca" required list="marcas" autocomplete="off"></label>
           <label class="adm-field"><span>Modelo y versión *</span><input name="modelo" required placeholder="Onix LT 1.4" autocomplete="off"></label>
-          <label class="adm-field"><span>Año *</span><input name="anio" type="number" inputmode="numeric" min="1900" max="2100" required></label>
-          <label class="adm-field"><span>Kilómetros *</span><input name="km" type="number" inputmode="numeric" min="0" step="1" required></label>
+          <label class="adm-field"><span>Año *</span><input name="anio" type="number" inputmode="numeric" min="1950" max="2100" required></label>
+          <label class="adm-field"><span>Kilómetros *</span><input name="km" type="text" inputmode="numeric" placeholder="64.000" autocomplete="off" required></label>
           <label class="adm-field"><span>Carrocería</span><select name="carroceria" data-opts="carrocerias"></select></label>
           <label class="adm-field"><span>Combustible</span><select name="combustible" data-opts="combustibles"></select></label>
           <label class="adm-field"><span>Caja</span><select name="caja" data-opts="cajas"></select></label>
@@ -109,7 +105,7 @@
 
         <fieldset class="adm-card adm-grid">
           <legend>Precio y estado</legend>
-          <label class="adm-field"><span>Precio</span><input name="precio" type="number" inputmode="numeric" min="0" step="1" placeholder="Vacío = «Consultar»"></label>
+          <label class="adm-field"><span>Precio</span><input name="precio" type="text" inputmode="numeric" placeholder="14.500 · vacío = «Consultar»" autocomplete="off"></label>
           <label class="adm-field"><span>Moneda</span>
             <select name="moneda"><option value="USD">U$S (dólares)</option><option value="UYU">$ (pesos)</option></select>
           </label>
