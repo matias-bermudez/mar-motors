@@ -67,6 +67,16 @@ $('[data-salir]').addEventListener('click', async () => {
   mostrar('login');
 });
 
+// GitHub Pages deja que el navegador guarde cada página 10 minutos: desde el panel, los links a la web
+// ([data-fresco]) agregan ?v=<hora> al hacer clic para abrir siempre lo recién publicado.
+document.addEventListener('click', (e) => {
+  const a = e.target.closest('a[data-fresco]');
+  if (!a) return;
+  const url = new URL(a.href, location.href);
+  url.searchParams.set('v', Date.now());
+  a.href = url.toString();
+});
+
 // ── Listado ──────────────────────────────────────────────────────
 const lista = $('[data-lista]');
 const buscar = $('[data-buscar]');
@@ -136,7 +146,7 @@ function renderLista() {
         </select>
         <label><input type="checkbox" data-accion="publicado"${a.publicado ? ' checked' : ''}>Publicado</label>
         <button class="adm-mini primary" type="button" data-accion="editar">Editar</button>
-        ${enLaWeb(a) ? `<a class="adm-mini" href="${esc(urlAuto(a))}" target="_blank" rel="noopener">Ver</a>
+        ${enLaWeb(a) ? `<a class="adm-mini" href="${esc(urlAuto(a))}" target="_blank" rel="noopener" data-fresco>Ver</a>
         <button class="adm-mini" type="button" data-accion="copiar" title="Copiar el link para compartir">Link</button>` : ''}
         <button class="adm-mini danger" type="button" data-accion="borrar">Borrar</button>
       </div>
