@@ -1,40 +1,73 @@
-# Arma la web (scripts/build.mjs) y la publica en GitHub Pages.
-# Corre con cada push, cada hora (para que las páginas de los autos cargados en el panel
-# lleguen a Google y a las vistas previas de WhatsApp) y cuando Supabase avisa un cambio (ver README).
+# Arma la web con scripts/build.mjs (autos de la base compartida, fotos bajadas al sitio) y la publica
+# en GitHub Pages:
+# - en cada push a main;
+# - cuando se guarda un auto en el panel (la base dispara workflow_dispatch de deploy.yml);
+# - cada 15 minutos, solo si cambiaron los autos (respaldo: compara con estado.json de la web publicada).
 name: Publicar
 
 on:
   push:
     branches: [main]
   schedule:
-    - cron: '7 * * * *'
-  repository_dispatch:
-    types: [autos]
+    - cron: '*/15 * * * *'
   workflow_dispatch:
 
 permissions:
   contents: read
   pages: write
   id-token: write
+  actions: write
 
+# Sin cancelar: si no, un chequeo programado podría cortar la publicación de un push.
 concurrency:
   group: pages
   cancel-in-progress: false
 
 jobs:
-  publicar:
+  generar:
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deploy.outputs.page_url }}
+    outputs:
+      cambio: ${{ steps.generar.outputs.cambio }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
           node-version: 22
-      - run: node scripts/build.mjs
-      - uses: actions/upload-pages-artifact@v5
+      # Fotos ya bajadas en publicaciones anteriores (no cambian nunca): solo se bajan las nuevas.
+      - uses: actions/cache/restore@v6
+        with:
+          path: .cache/fotos
+          key: fotos-${{ github.run_id }}
+          restore-keys: fotos-
+      - id: generar
+        run: node scripts/build.mjs
+        env:
+          SOLO_SI_CAMBIO: ${{ github.event_name == 'schedule' && '1' || '' }}
+      - if: steps.generar.outputs.cambio == 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: .cache/fotos
+          key: fotos-${{ hashFiles('.cache/fotos/**') }}
+      - if: steps.generar.outputs.cambio == 'true'
+        uses: actions/configure-pages@v6
+      - if: steps.generar.outputs.cambio == 'true'
+        uses: actions/upload-pages-artifact@v5
         with:
           path: _site
+      # GitHub apaga los workflows programados de repos públicos a los 60 días sin commits; esto lo mantiene vivo.
+      - name: Mantener activa la publicación automática
+        if: github.event_name == 'schedule'
+        run: gh api -X PUT "repos/${{ github.repository }}/actions/workflows/deploy.yml/enable"
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+  publicar:
+    needs: generar
+    if: needs.generar.outputs.cambio == 'true'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
       - id: deploy
         uses: actions/deploy-pages@v5
