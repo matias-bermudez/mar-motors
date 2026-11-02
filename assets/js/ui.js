@@ -24,7 +24,7 @@ export const CAJAS = ['Manual', 'Automática'];
 const num = (n) => Number(n).toLocaleString('es-UY');
 export const nombre = (a) => `${a.marca} ${a.modelo}`;
 export const categoria = (a) => clase(a)?.cat || 'Autos';
-export const fmtKm = (km) => `${num(km || 0)} km`;
+export const fmtKm = (km) => (km == null ? 'Km a consultar' : `${num(km)} km`);
 export const fmtPrecio = (a) => (a.precio ? `${a.moneda === 'UYU' ? '$' : 'U$S'} ${num(a.precio)}` : 'Consultar');
 export const detalle = (a) => [a.combustible, a.caja, a.color].filter(Boolean).join(' · ');
 

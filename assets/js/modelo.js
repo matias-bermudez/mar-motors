@@ -40,7 +40,8 @@ export function deFila(r) {
     marca: r.marca,
     modelo: r.modelo,
     anio: r.anio,
-    km: r.km ?? 0,
+    // extra.sin_km: el dueño no sabe los km (campo vacío en el panel) → "Km a consultar".
+    km: r.extra?.sin_km ? null : r.km ?? 0,
     precio: r.precio || null,
     moneda: r.moneda === 'UYU' ? 'UYU' : 'USD',
     carroceria,
@@ -65,8 +66,9 @@ export function deFila(r) {
 export function aFila(a) {
   const f = {};
   const copiar = ['marca', 'modelo', 'anio', 'km', 'precio', 'moneda', 'carroceria', 'combustible', 'motor',
-    'color', 'puertas', 'descripcion', 'fotos', 'estado', 'publicado'];
+    'color', 'puertas', 'descripcion', 'fotos', 'estado', 'publicado', 'extra'];
   for (const k of copiar) if (a[k] !== undefined) f[k] = a[k];
+  if (f.km === null) f.km = 0; // la columna no admite null: "sin km" va en extra.sin_km
   if (a.caja !== undefined) f.transmision = a.caja;
   // Una carrocería que esta web no conoce (cargada desde otro lado) no cambia el `tipo` que ya tenía.
   if (a.carroceria in TIPO) f.tipo = TIPO[a.carroceria];

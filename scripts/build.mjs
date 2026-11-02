@@ -218,7 +218,7 @@ function datosAuto(a, url, descripcion) {
     model: a.modelo,
     vehicleModelDate: String(a.anio),
     itemCondition: 'https://schema.org/UsedCondition',
-    mileageFromOdometer: { '@type': 'QuantitativeValue', value: a.km, unitCode: 'KMT' },
+    mileageFromOdometer: a.km == null ? undefined : { '@type': 'QuantitativeValue', value: a.km, unitCode: 'KMT' },
     fuelType: a.combustible,
     vehicleTransmission: a.caja,
     bodyType: nombreCarroceria(a),

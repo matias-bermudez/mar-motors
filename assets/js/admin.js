@@ -478,7 +478,7 @@ function leerForm() {
     marca: f.marca.value.trim(),
     modelo: f.modelo.value.trim(),
     anio: entero(f.anio.value),
-    km: monto(f.km.value) ?? 0,
+    km: monto(f.km.value), // vacío = "Km a consultar"
     carroceria: f.carroceria.value,
     combustible: f.combustible.value,
     caja: f.caja.value,
@@ -490,6 +490,8 @@ function leerForm() {
     estado: f.estado.value,
     publicado: f.publicado.checked,
     descripcion: texto(f.descripcion.value),
+    // Se conserva lo que otra herramienta haya guardado en extra.
+    extra: { ...editando?.extra, sin_km: monto(f.km.value) === null || undefined },
   };
 }
 
@@ -500,7 +502,7 @@ function validar(row) {
     [f.marca, !row.marca],
     [f.modelo, !row.modelo],
     [f.anio, !(row.anio >= 1950 && row.anio <= max)],
-    [f.km, !Number.isSafeInteger(row.km) || row.km > 2e6],
+    [f.km, row.km !== null && (!Number.isSafeInteger(row.km) || row.km > 2e6)],
     [f.precio, row.precio !== null && !(row.precio <= 2e9)],
   ];
   malos.forEach(([el, mal]) => el.setAttribute('aria-invalid', String(mal)));
