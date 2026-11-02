@@ -153,3 +153,7 @@ Al lanzar:
 2. [Google Search Console](https://search.google.com/search-console): agregar la propiedad, verificar con la etiqueta HTML (el código va en `googleVerificacion`), enviar `sitemap.xml` y pedir la indexación del inicio.
 3. **[Perfil de Empresa de Google](https://business.google.com)** (la ficha de Google Maps): es lo que más pesa en las búsquedas locales. Mismo nombre, dirección y teléfono que la web, horarios, fotos del local y el link a la web.
 4. Poner el link de la web en la bio de Instagram y en Facebook.
+
+## Registro
+
+- 2026-11-02: primer auto real (Fiat Strada Volcano AT 2025, km a consultar), los 7 de ejemplo borrados. Datos del negocio desde su Instagram: WhatsApp 099 937 215 (otros: 092 322 937, 091 885 777, 099 455 516), Carlos María Ramírez 1146, lun-vie 9:30-18, sáb 10-14, dom 9:30-13:30 (cartel del local). Tienen 3 sucursales: Yaguarón 1867, Maldonado 1328 y C. M. Ramírez 1146; la web muestra una sola dirección.
